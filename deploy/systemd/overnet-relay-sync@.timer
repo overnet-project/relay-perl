@@ -1,0 +1,10 @@
+[Unit]
+Description=Overnet Relay Sync Timer %i
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+Unit=overnet-relay-sync@%i.service
+
+[Install]
+WantedBy=timers.target

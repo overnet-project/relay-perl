@@ -1,0 +1,31 @@
+[Unit]
+Description=Overnet Relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/overnet/overnet-relay.env
+ExecStart=/usr/bin/env perl /opt/overnet/overnet-relay-perl/bin/overnet-relay-service.pl \
+  --host ${OVERNET_RELAY_HOST} \
+  --port ${OVERNET_RELAY_PORT} \
+  --name ${OVERNET_RELAY_NAME} \
+  --description ${OVERNET_RELAY_DESCRIPTION} \
+  --software ${OVERNET_RELAY_SOFTWARE} \
+  --version ${OVERNET_RELAY_VERSION} \
+  --relay-profile ${OVERNET_RELAY_PROFILE} \
+  --store-file ${OVERNET_RELAY_STORE_FILE} \
+  --health-file ${OVERNET_RELAY_HEALTH_FILE} \
+  --log-file ${OVERNET_RELAY_LOG_FILE} \
+  --max-connections-per-ip ${OVERNET_RELAY_MAX_CONNECTIONS_PER_IP} \
+  --event-rate-limit ${OVERNET_RELAY_EVENT_RATE_LIMIT} \
+  --service-policy publish=${OVERNET_RELAY_SERVICE_POLICY_PUBLISH} \
+  --service-policy query=${OVERNET_RELAY_SERVICE_POLICY_QUERY} \
+  --service-policy subscribe=${OVERNET_RELAY_SERVICE_POLICY_SUBSCRIBE} \
+  --service-policy sync=${OVERNET_RELAY_SERVICE_POLICY_SYNC} \
+  --service-policy object_read=${OVERNET_RELAY_SERVICE_POLICY_OBJECT_READ}
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

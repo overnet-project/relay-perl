@@ -1,0 +1,13 @@
+{
+  "local_url": "ws://127.0.0.1:7448",
+  "peers": [
+    {
+      "name": "relay-sync-b-to-a",
+      "remote_url": "ws://127.0.0.1:7449",
+      "subscription_id": "relay-sync-b-to-a",
+      "filter": {
+        "kinds": [39000, 39001, 39002, 39003, 9000, 9001, 9002, 9009, 9021, 9022]
+      }
+    }
+  ]
+}
