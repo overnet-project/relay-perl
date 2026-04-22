@@ -3,6 +3,8 @@ package Overnet::Relay;
 use strict;
 use warnings;
 
+our $VERSION = '0.001';
+
 use parent 'Net::Nostr::Relay';
 
 use AnyEvent;
