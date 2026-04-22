@@ -23,12 +23,7 @@ Shared core validation and runtime code live in [core-perl](https://github.com/o
 Run the full relay-heavy verification path with:
 
 ```bash
-/home/_73/.local/bin/plx prove \
-  -Ilib \
-  -Ilocal/lib/perl5 \
-  -I../core-perl/lib \
-  -I../core-perl/local/lib/perl5 \
-  -r t
+prove -r t
 ```
 
 The default release gate is `bin/overnet-release-gate.pl`.
@@ -47,7 +42,7 @@ It runs the IRC verification path:
 Run the default release gate with:
 
 ```bash
-/home/_73/.local/bin/plx perl -Ilib -Ilocal/lib/perl5 bin/overnet-release-gate.pl
+perl bin/overnet-release-gate.pl
 ```
 
 ## Related Repositories
