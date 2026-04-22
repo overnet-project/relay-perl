@@ -4,8 +4,8 @@ use Test::More;
 
 use lib 'lib';
 use lib 'local/lib/perl5';
-use lib '../overnet-core-perl/lib';
-use lib '../overnet-core-perl/local/lib/perl5';
+use lib '../core-perl/lib';
+use lib '../core-perl/local/lib/perl5';
 
 use_ok('Overnet::Relay');
 use_ok('Overnet::Relay::Store::File');

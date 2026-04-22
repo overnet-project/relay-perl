@@ -21,8 +21,8 @@ use Net::Nostr::Key;
 use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 
-my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'overnet-program-irc', 'bin', 'overnet-irc-server.pl');
-my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-adapter-irc', 'lib');
+my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
+my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 my $relay_backup_script = File::Spec->catfile($FindBin::Bin, '..', 'bin', 'overnet-relay-backup.pl');
 

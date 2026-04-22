@@ -16,9 +16,9 @@ use POSIX qw(WNOHANG);
 use Symbol qw(gensym);
 use Time::HiRes qw(sleep time);
 
-my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc');
+my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
 my $program_path = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server.pl');
-my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-adapter-irc', 'lib');
+my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $code_lib = File::Spec->catdir($FindBin::Bin, '..', 'lib');
 my $code_local_lib = File::Spec->catdir($FindBin::Bin, '..', 'local', 'lib', 'perl5');
 

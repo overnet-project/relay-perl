@@ -4,7 +4,7 @@ use Test::More;
 use File::Spec;
 use FindBin;
 
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
 require Overnet::Program::IRC::Server;
 

@@ -26,9 +26,9 @@ use Overnet::Core::Nostr;
 use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 
-my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'overnet-program-irc', 'bin', 'overnet-irc-server.pl');
-my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-adapter-irc', 'lib');
-my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-spec', 'fixtures', 'irc');
+my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
+my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
+my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', 'spec', 'fixtures', 'irc');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 my $program_irc_server_group = $ENV{OVERNET_IRC_SERVER_GROUP} || 'base';
 
@@ -7702,7 +7702,7 @@ subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
       $FindBin::Bin,
       '..',
       '..',
-      'overnet-program-irc',
+      'irc-server',
       'lib',
       'Overnet',
       'Program',
@@ -7713,7 +7713,7 @@ subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
       $FindBin::Bin,
       '..',
       '..',
-      'overnet-program-irc',
+      'irc-server',
       'bin',
       'overnet-irc-local-server.pl',
     ),
@@ -7721,7 +7721,7 @@ subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
       $FindBin::Bin,
       '..',
       '..',
-      'overnet-program-irc',
+      'irc-server',
       'bin',
       'overnet-irc-server.pl',
     ),
@@ -7729,7 +7729,7 @@ subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
       $FindBin::Bin,
       '..',
       '..',
-      'overnet-program-irc',
+      'irc-server',
       'bin',
       'overnet-irc-chat-client.pl',
     ),
@@ -7753,7 +7753,7 @@ subtest 'IRC server source keeps relay I/O and raw authoritative interpretation 
     $FindBin::Bin,
     '..',
     '..',
-    'overnet-program-irc',
+    'irc-server',
     'lib',
     'Overnet',
     'Program',

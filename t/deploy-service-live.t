@@ -107,7 +107,7 @@ sub _wait_for_port_ready {
 
 my $code_root = File::Spec->catdir($FindBin::Bin, '..');
 my $project_root = File::Spec->catdir($code_root, '..');
-my $irc_root = File::Spec->catdir($project_root, 'overnet-program-irc');
+my $irc_root = File::Spec->catdir($project_root, 'irc-server');
 
 my $relay_service_script = File::Spec->catfile($code_root, 'bin', 'overnet-relay-service.pl');
 my $irc_service_script = File::Spec->catfile($irc_root, 'bin', 'overnet-irc-service.pl');

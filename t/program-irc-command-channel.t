@@ -4,7 +4,7 @@ use Test::More;
 use File::Spec;
 use FindBin;
 
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
 use_ok('Overnet::Program::IRC::Command::Channel');
 
@@ -92,7 +92,7 @@ my $server_path = File::Spec->catfile(
   $FindBin::Bin,
   '..',
   '..',
-  'overnet-program-irc',
+  'irc-server',
   'lib',
   'Overnet',
   'Program',

@@ -4,8 +4,8 @@ use Test::More;
 use File::Spec;
 use FindBin;
 
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc', 'lib');
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-core-perl', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'core-perl', 'lib');
 
 use Overnet::Authority::HostedChannel;
 use Overnet::Program::IRC::Authority::Coordinator;

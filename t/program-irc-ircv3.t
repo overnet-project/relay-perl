@@ -5,7 +5,7 @@ use File::Spec;
 use FindBin;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
 use_ok('Overnet::Program::IRC::Server');
 use_ok('Overnet::Program::IRC::Command::Auth');

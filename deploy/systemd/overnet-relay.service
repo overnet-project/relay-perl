@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=/etc/overnet/overnet-relay.env
-ExecStart=/usr/bin/env perl /opt/overnet/overnet-relay-perl/bin/overnet-relay-service.pl \
+ExecStart=/usr/bin/env perl /opt/overnet/relay-perl/bin/overnet-relay-service.pl \
   --host ${OVERNET_RELAY_HOST} \
   --port ${OVERNET_RELAY_PORT} \
   --name ${OVERNET_RELAY_NAME} \

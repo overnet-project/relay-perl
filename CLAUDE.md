@@ -2,7 +2,7 @@
 
 This directory contains the Perl reference implementation for the Overnet relay and relay-backed integration surface.
 
-The specification in `../overnet-spec/` is authoritative. Shared core/runtime semantics live in `../overnet-core-perl/`. Relay behavior, deploy packaging, and the heavy IRC gate live here.
+The specification in `../spec/` is authoritative. Shared core/runtime semantics live in `../core-perl/`. Relay behavior, deploy packaging, and the heavy IRC gate live here.
 
 ## Priorities
 
@@ -22,8 +22,8 @@ Use the sibling core repo on `@INC` when running tests here:
 /home/_73/.local/bin/plx prove \
   -Ilib \
   -Ilocal/lib/perl5 \
-  -I../overnet-core-perl/lib \
-  -I../overnet-core-perl/local/lib/perl5 \
+  -I../core-perl/lib \
+  -I../core-perl/local/lib/perl5 \
   -r t
 ```
 

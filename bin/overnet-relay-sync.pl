@@ -7,8 +7,8 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP ();
 use lib "$FindBin::Bin/../lib";
 use lib "$FindBin::Bin/../local/lib/perl5";
-use lib "$FindBin::Bin/../../overnet-core-perl/lib";
-use lib "$FindBin::Bin/../../overnet-core-perl/local/lib/perl5";
+use lib "$FindBin::Bin/../../core-perl/lib";
+use lib "$FindBin::Bin/../../core-perl/local/lib/perl5";
 
 use Overnet::Relay::Sync;
 use Overnet::Relay::Sync::Config;

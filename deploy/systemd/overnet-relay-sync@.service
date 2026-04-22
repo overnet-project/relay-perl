@@ -6,5 +6,5 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/overnet/%i/overnet-relay-sync.env
-ExecStart=/usr/bin/env perl /opt/overnet/overnet-relay-perl/bin/overnet-relay-sync.pl \
+ExecStart=/usr/bin/env perl /opt/overnet/relay-perl/bin/overnet-relay-sync.pl \
   --config ${OVERNET_RELAY_SYNC_CONFIG}

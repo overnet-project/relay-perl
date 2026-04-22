@@ -5,7 +5,7 @@ use File::Spec;
 use FindBin;
 
 my $perl = '/opt/perl-5.42/bin/perl';
-my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'overnet-program-irc');
+my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
 my @scripts = (
   File::Spec->catfile($program_repo, 'bin', 'overnet-irc-local-server.pl'),
   File::Spec->catfile($program_repo, 'bin', 'overnet-irc-chat-client.pl'),
