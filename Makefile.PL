@@ -30,6 +30,7 @@ WriteMakefile(
       qw(
         t/bin-syntax.t
         t/makemaker-metadata.t
+        t/manifest-skip-policy.t
         t/relay.t
         t/repo-split.t
       )
