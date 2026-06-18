@@ -13,6 +13,11 @@ require Overnet::Program::IRC::Server;
   our @ISA = ('Overnet::Program::IRC::Server');
 
   sub _read_authoritative_nip29_events {
+    my ($self, $channel, %args) = @_;
+    push @{$self->{authoritative_read_calls}}, {
+      channel => $channel,
+      args    => { %args },
+    };
     return [];
   }
 
@@ -52,6 +57,8 @@ subtest 'known hosted channels are not silently recreated from empty authoritati
   ok !$result->{allowed}, 'empty authoritative reads do not silently allow JOIN for a known hosted channel';
   ok !$result->{create_channel}, 'empty authoritative reads do not silently widen into channel creation';
   ok !$result->{auth_required}, 'the known hosted-channel denial is not treated as missing auth';
+  ok $server->{authoritative_read_calls}[0]{args}{force},
+    'uncached relay admission uses a one-shot refresh query before subscribing';
 };
 
 subtest 'local transient channel state does not make a hosted channel authoritative-known' => sub {
