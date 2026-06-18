@@ -57,6 +57,10 @@ can_ok(
     return 14142;
   }
 
+  sub _is_authoritative_channel {
+    return 1;
+  }
+
   sub _request {
     my ($self, %args) = @_;
     push @{$self->{called}}, \%args;
@@ -94,6 +98,23 @@ is_deeply(
   'coordinator derives deterministic authoritative channel subscription ids',
 );
 
+$mock->{called} = [];
+is_deeply(
+  Overnet::Program::IRC::Authority::Coordinator::load_authoritative_nip29_events(
+    $mock,
+    '#ops',
+    refresh => 1,
+  ),
+  [],
+  'forced authoritative channel reads use direct relay queries',
+);
+is_deeply(
+  [ map { $_->{method} } @{$mock->called} ],
+  [ 'nostr.query_events', 'nostr.query_events' ],
+  'forced authoritative channel reads do not open long-lived subscriptions before publishing',
+);
+
+$mock->{called} = [];
 is(
   Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_grant_subscription($mock),
   'irc.authority.grants:example.test',
