@@ -12,9 +12,10 @@ When rules conflict, follow this order:
 
 1. Overnet spec correctness
 2. Preserving documented relay/runtime behavior unless intentionally changing it
-3. Tests and release-gate coverage
-4. Deploy and recovery correctness
-5. Local style rules
+3. High performance at large scale
+4. Tests and release-gate coverage
+5. Deploy and recovery correctness
+6. Local style rules
 
 If relay work exposes a spec ambiguity or gap, update the spec and any relevant fixtures first, then update this implementation.
 
@@ -75,6 +76,12 @@ Relay behavior should remain Nostr-native where the spec requires Nostr-native p
 
 Do not weaken validation to make integration tests pass. If a valid scenario appears to require weaker validation, first check whether the spec is missing a rule or whether the test fixture is wrong.
 
+## Performance And Scale
+
+High performance at large scale is vital to the relay. Treat throughput, latency, memory growth, storage growth, sync cost, and subscription fanout behavior as core correctness concerns, not optional polish.
+
+Avoid changes that are acceptable only for small local tests but create obvious bottlenecks for large relay deployments. When a change touches hot paths such as event validation, persistence, filtering, subscription delivery, negentropy sync, backup/restore, or object reads, consider its behavior under high event volume, many subscribers, large stores, and repeated sync cycles.
+
 ## Deploy And Recovery
 
 Deploy, backup, restore, relay sync, and canary assets are part of the reference implementation surface. Keep them aligned with the same behavior exercised by the live tests.
@@ -104,6 +111,7 @@ At the end of every task, report:
 - files changed
 - behavior changes
 - validation changes
+- performance or scale implications
 - deploy/recovery changes
 - tests run
 - spec sections consulted
