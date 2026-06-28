@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use AnyEvent;
 use AnyEvent::WebSocket::Client;
@@ -7,7 +6,7 @@ use File::Spec;
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use Net::Nostr::Event;
 use Net::Nostr::Key;
 use Net::Nostr::Message;
@@ -146,7 +145,7 @@ sub _create_overnet_event {
       ['o', 'chat.channel'],
       ['d', 'irc:live:#ops'],
     ],
-    content => encode_json({
+    content => JSON::encode_json({
       provenance => { type => 'native' },
       body       => { text => $args{text} },
     }),

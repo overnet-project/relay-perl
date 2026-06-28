@@ -1,16 +1,15 @@
 package Overnet::Relay::Store::File;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use parent 'Net::Nostr::RelayStore';
 
 use File::Basename qw(dirname);
 use File::Path qw(make_path);
-use JSON::PP ();
+use JSON ();
 use Net::Nostr::Event;
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
 sub new {
   my ($class, %args) = @_;

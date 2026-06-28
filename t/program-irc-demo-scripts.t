@@ -1,10 +1,9 @@
-use strict;
-use warnings;
+use strictures 2;
 use Test::More;
 use File::Spec;
 use FindBin;
 
-my $perl = '/opt/perl-5.42/bin/perl';
+my $perl = $^X;
 my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
 my @scripts = (
   File::Spec->catfile($program_repo, 'bin', 'overnet-irc-local-server.pl'),

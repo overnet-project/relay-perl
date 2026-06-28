@@ -1,8 +1,7 @@
-use strict;
-use warnings;
+use strictures 2;
 use AnyEvent;
 use Test::More;
-use JSON::PP qw(encode_json);
+use JSON ();
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
@@ -328,7 +327,7 @@ sub _build_authoritative_auth_payload {
       [ 'challenge', $args{challenge} ],
     ],
   );
-  return encode_base64(encode_json($event->to_hash), '');
+  return encode_base64(JSON::encode_json($event->to_hash), '');
 }
 
 sub _build_authoritative_delegate_payload {
@@ -346,7 +345,7 @@ sub _build_authoritative_delegate_payload {
       (defined($args{nick}) ? ([ 'nick', $args{nick} ]) : ()),
     ],
   );
-  return encode_base64(encode_json($event->to_hash), '');
+  return encode_base64(JSON::encode_json($event->to_hash), '');
 }
 
 subtest 'IRC server survives live authoritative relay restart without replaying duplicate client bootstrap' => sub {

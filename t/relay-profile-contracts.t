@@ -1,14 +1,13 @@
-use strict;
-use warnings;
+use strictures 2;
 
-use JSON::PP ();
+use JSON ();
 use Test::More;
 
 use Net::Nostr::Key;
 use Net::Nostr::Message;
 use Overnet::Relay;
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 my $author = Net::Nostr::Key->new;
 
 subtest 'profile validation is off by default without configured contracts' => sub {
@@ -281,7 +280,7 @@ sub _chat_contract {
           properties => {
             text => { type => 'string' },
           },
-          additionalProperties => JSON::PP::false,
+          additionalProperties => JSON::false,
         },
         references => [],
         state_effect => 'updates',

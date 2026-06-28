@@ -1,10 +1,9 @@
 package Overnet::Relay::ProfileContracts;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use Carp qw(croak);
-use JSON::PP ();
+use JSON ();
 use Storable qw(dclone);
 
 use Overnet::Core::ProfileContract ();
@@ -63,8 +62,8 @@ sub metadata {
   return undef unless @{$self->{contracts}};
 
   return {
-    configured => JSON::PP::true,
-    enforced => $self->{policy} eq 'off' ? JSON::PP::false : JSON::PP::true,
+    configured => JSON::true,
+    enforced => $self->{policy} eq 'off' ? JSON::false : JSON::true,
     policy => $self->{policy},
     profiles => [@{$self->{profiles}}],
     event_types => [@{$self->{event_types}}],

@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 use Test::More;
 use File::Spec;
 use File::Temp qw(tempdir);

@@ -1,7 +1,6 @@
-use strict;
-use warnings;
+use strictures 2;
 
-use JSON::PP ();
+use JSON ();
 use Test::More;
 
 use Net::Nostr::Filter;
@@ -10,7 +9,7 @@ use Net::Nostr::Message;
 use Net::Nostr::Negentropy;
 use Overnet::Relay;
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
 subtest 'NIP-11 info includes Overnet metadata' => sub {
   my $relay = _build_relay();

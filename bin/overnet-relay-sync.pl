@@ -1,10 +1,9 @@
 #!/usr/bin/env perl
-use strict;
-use warnings;
+use strictures 2;
 
 use FindBin;
 use Getopt::Long qw(GetOptions);
-use JSON::PP ();
+use JSON ();
 use lib grep { -d $_ } (
   "$FindBin::Bin/../lib",
   "$FindBin::Bin/../../core-perl/lib",
@@ -13,7 +12,7 @@ use lib grep { -d $_ } (
 use Overnet::Relay::Sync;
 use Overnet::Relay::Sync::Config;
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
 my $config_path = '';
 my $help = 0;

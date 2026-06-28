@@ -1,7 +1,6 @@
 package Overnet::Relay::Sync;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use AnyEvent;
 use Carp qw(croak);

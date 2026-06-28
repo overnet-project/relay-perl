@@ -1,10 +1,9 @@
 package Overnet::Relay::Info;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use Carp qw(croak);
-use JSON::PP ();
+use JSON ();
 
 use Class::Tiny qw(
   name
@@ -30,7 +29,7 @@ my @SCALAR_FIELDS = qw(
 );
 
 my @STRUCT_FIELDS = qw(supported_nips limitation fees overnet);
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
 sub new {
   my ($class, %args) = @_;

@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use AnyEvent;
 use AnyEvent::WebSocket::Client;
@@ -7,7 +6,7 @@ use File::Spec;
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use Net::Nostr::Filter;
 use Net::Nostr::Key;
 use Net::Nostr::Message;
@@ -145,7 +144,7 @@ sub _http_request {
 sub _decode_http_json_body {
   my ($response) = @_;
   my (undef, $body) = split /\r\n\r\n/, $response, 2;
-  return decode_json($body);
+  return JSON::decode_json($body);
 }
 
 sub _connect_ws {
@@ -187,7 +186,7 @@ sub _create_overnet_event {
   return $args{key}->create_event(
     kind => $args{kind},
     tags => \@tags,
-    content => encode_json({
+    content => JSON::encode_json({
       provenance => { type => 'native' },
       body       => $args{body},
     }),

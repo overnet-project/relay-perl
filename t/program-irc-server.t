@@ -1,8 +1,7 @@
-use strict;
-use warnings;
+use strictures 2;
 use AnyEvent;
 use Test::More;
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
@@ -49,7 +48,7 @@ sub _load_irc_fixture {
   open my $fh, '<', $path or die "Can't read $path: $!";
   my $json = do { local $/; <$fh> };
   close $fh;
-  return decode_json($json);
+  return JSON::decode_json($json);
 }
 
 sub _method_count {
@@ -322,7 +321,7 @@ sub _build_authoritative_auth_event_hash {
 sub _build_authoritative_auth_payload {
   my (%args) = @_;
   return encode_base64(
-    encode_json(
+    JSON::encode_json(
       _build_authoritative_auth_event_hash(%args)
     ),
     '',
@@ -360,7 +359,7 @@ sub _build_authoritative_delegate_event_hash {
 sub _build_authoritative_delegate_payload {
   my (%args) = @_;
   return encode_base64(
-    encode_json(
+    JSON::encode_json(
       _build_authoritative_delegate_event_hash(%args)
     ),
     '',
@@ -400,7 +399,7 @@ sub _read_authenticate_payload {
     last if length($chunk) < 400;
   }
 
-  return decode_json(decode_base64($payload));
+  return JSON::decode_json(decode_base64($payload));
 }
 
 sub _free_port {
@@ -565,7 +564,7 @@ sub _decode_e2ee_transport_from_line {
   return undef unless $body =~ /\A\+overnet-e2ee-v1\s+(.+)\z/;
 
   my $decoded = decode_base64($1);
-  return decode_json($decoded);
+  return JSON::decode_json($decoded);
 }
 
 sub _find_emitted_item {
@@ -622,7 +621,7 @@ sub _assert_signed_emitted_matches_fixture {
   my $data = $item->{data};
   my $expected_content = defined $content_override
     ? $content_override
-    : decode_json($expected->{content});
+    : JSON::decode_json($expected->{content});
 
   like $data->{id}, qr/\A[0-9a-f]{64}\z/, "$label has a signed event id";
   like $data->{sig}, qr/\A[0-9a-f]{128}\z/, "$label has a Schnorr signature";
@@ -631,7 +630,7 @@ sub _assert_signed_emitted_matches_fixture {
   cmp_ok $data->{created_at}, '>=', $time_window->{min}, "$label created_at is not before send time";
   cmp_ok $data->{created_at}, '<=', $time_window->{max}, "$label created_at is within the send window";
   is_deeply $data->{tags}, $expected->{tags}, "$label tags match fixture";
-  is_deeply decode_json($data->{content}), $expected_content,
+  is_deeply JSON::decode_json($data->{content}), $expected_content,
     "$label content matches fixture semantically";
 
   my $event = Net::Nostr::Event->from_wire($data);
@@ -883,14 +882,14 @@ sub _assert_opaque_private_message_metadata {
         exists $state->{members}{$_}
       } sort keys %{$state->{present} || {}};
       my $admission = {
-        allowed => JSON::PP::false,
-        member  => JSON::PP::false,
+        allowed => JSON::false,
+        member  => JSON::false,
         reason  => $state->{closed} ? '+i' : '',
       };
       if (defined $input->{actor_pubkey} && exists $state->{members}{$input->{actor_pubkey}}) {
         $admission = {
-          allowed => JSON::PP::true,
-          member  => JSON::PP::true,
+          allowed => JSON::true,
+          member  => JSON::true,
           reason  => '',
         };
       }
@@ -922,23 +921,23 @@ sub _assert_opaque_private_message_metadata {
         authority_profile => 'nip29',
         object_type       => 'chat.channel',
         object_id         => 'irc:' . ($session->{network} || 'irc.test') . ':' . $channel,
-        allowed           => JSON::PP::false,
-        member            => JSON::PP::false,
-        present           => JSON::PP::false,
-        create_channel    => JSON::PP::false,
-        auth_required     => defined($input->{actor_pubkey}) ? JSON::PP::false : JSON::PP::true,
+        allowed           => JSON::false,
+        member            => JSON::false,
+        present           => JSON::false,
+        create_channel    => JSON::false,
+        auth_required     => defined($input->{actor_pubkey}) ? JSON::false : JSON::true,
         reason            => defined($input->{actor_pubkey}) ? ($state->{closed} ? '+i' : '') : 'auth_required',
       };
       if (defined $input->{actor_pubkey} && exists $state->{members}{$input->{actor_pubkey}}) {
         $admission = {
           %{$admission},
-          allowed => JSON::PP::true,
-          member  => JSON::PP::true,
+          allowed => JSON::true,
+          member  => JSON::true,
           reason  => '',
         };
       }
       if (defined $input->{actor_pubkey} && exists $state->{present}{$input->{actor_pubkey}}) {
-        $admission->{present} = JSON::PP::true;
+        $admission->{present} = JSON::true;
       }
 
       return {
@@ -962,8 +961,8 @@ sub _assert_opaque_private_message_metadata {
             object_type       => 'chat.channel',
             object_id         => 'irc:' . ($session->{network} || 'irc.test') . ':' . $channel,
             allowed           => (!$state->{moderated} || $roles{'irc.operator'} || $roles{'irc.voice'})
-              ? JSON::PP::true
-              : JSON::PP::false,
+              ? JSON::true
+              : JSON::false,
             roles             => \@roles,
             presentational_prefix => $roles{'irc.operator'} ? '@' : $roles{'irc.voice'} ? '+' : '',
             reason            => (!$state->{moderated} || $roles{'irc.operator'} || $roles{'irc.voice'}) ? '' : '+m',
@@ -987,8 +986,8 @@ sub _assert_opaque_private_message_metadata {
             object_type       => 'chat.channel',
             object_id         => 'irc:' . ($session->{network} || 'irc.test') . ':' . $channel,
             allowed           => (!$state->{topic_restricted} || $roles{'irc.operator'})
-              ? JSON::PP::true
-              : JSON::PP::false,
+              ? JSON::true
+              : JSON::false,
             reason            => (!$state->{topic_restricted} || $roles{'irc.operator'}) ? '' : '+t',
           },
         ],
@@ -1009,8 +1008,8 @@ sub _assert_opaque_private_message_metadata {
         object_type       => 'chat.channel',
         object_id         => 'irc:' . ($session->{network} || 'irc.test') . ':' . $channel,
         allowed           => $state->{tombstoned}
-          ? JSON::PP::false
-          : $roles{'irc.operator'} ? JSON::PP::true : JSON::PP::false,
+          ? JSON::false
+          : $roles{'irc.operator'} ? JSON::true : JSON::false,
         mode              => $mode,
         reason            => $state->{tombstoned}
           ? 'deleted'
@@ -1063,7 +1062,7 @@ sub _assert_opaque_private_message_metadata {
         object_type       => 'chat.channel',
         object_id         => 'irc:' . ($session->{network} || 'irc.test') . ':' . $channel,
         action            => $action,
-        allowed           => JSON::PP::false,
+        allowed           => JSON::false,
         reason            => '',
       );
       if ($action eq 'undelete') {
@@ -1071,15 +1070,15 @@ sub _assert_opaque_private_message_metadata {
           ? 'not_deleted'
           : $roles{'irc.operator'} ? '' : 'not_operator';
         $permission{allowed} = ($state->{tombstoned} && $roles{'irc.operator'})
-          ? JSON::PP::true
-          : JSON::PP::false;
+          ? JSON::true
+          : JSON::false;
       } else {
         $permission{reason} = $state->{tombstoned}
           ? 'deleted'
           : $roles{'irc.operator'} ? '' : 'not_operator';
         $permission{allowed} = (!$state->{tombstoned} && $roles{'irc.operator'})
-          ? JSON::PP::true
-          : JSON::PP::false;
+          ? JSON::true
+          : JSON::false;
       }
       if ($permission{allowed}) {
         $permission{target_pubkey} = $input->{target_pubkey}
@@ -1985,7 +1984,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     overnet_oid => $channel_object_id,
   );
   ok $topic_item, 'runtime recorded the channel topic state';
-  my $topic_expected_content = decode_json($topic->{expected}{event}{content});
+  my $topic_expected_content = JSON::decode_json($topic->{expected}{event}{content});
   $topic_expected_content->{provenance}{external_identity} = 'bob';
   _assert_signed_emitted_matches_fixture(
     $topic_item,
@@ -2031,7 +2030,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     overnet_oid => $channel_object_id,
   );
   ok $part_item, 'runtime recorded the channel part event';
-  my $part_expected_content = decode_json($part->{expected}{event}{content});
+  my $part_expected_content = JSON::decode_json($part->{expected}{event}{content});
   $part_expected_content->{provenance}{external_identity} = 'alice_';
   _assert_signed_emitted_matches_fixture(
     $part_item,
@@ -2053,7 +2052,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     overnet_oid => $channel_object_id,
   );
   ok $quit_item, 'runtime recorded the channel quit event';
-  my $quit_expected_content = decode_json($quit->{expected}{event}{content});
+  my $quit_expected_content = JSON::decode_json($quit->{expected}{event}{content});
   $quit_expected_content->{provenance}{external_identity} = 'bob';
   $quit_expected_content->{body}{reason} = 'gone';
   _assert_signed_emitted_matches_fixture(
@@ -2242,7 +2241,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
     overnet_oid => $bob_dm_object_id,
   );
   ok $dm_message_item, 'runtime recorded the direct-message PRIVMSG private message';
-  my $dm_message_content = decode_json($dm_privmsg->{expected}{event}{content});
+  my $dm_message_content = JSON::decode_json($dm_privmsg->{expected}{event}{content});
   $dm_message_content->{provenance}{origin} = $network . '/bob';
   $dm_message_content->{provenance}{external_identity} = 'alice';
   $dm_message_content->{body}{text} = 'hello in private';
@@ -2269,7 +2268,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
     overnet_oid => $alice_dm_object_id,
   );
   ok $dm_notice_item, 'runtime recorded the direct-message NOTICE private message';
-  my $dm_notice_content = decode_json($dm_notice->{expected}{event}{content});
+  my $dm_notice_content = JSON::decode_json($dm_notice->{expected}{event}{content});
   $dm_notice_content->{provenance}{origin} = $network . '/alice';
   $dm_notice_content->{provenance}{external_identity} = 'bob';
   $dm_notice_content->{body}{text} = 'private notice';
@@ -2440,7 +2439,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
   };
   my $rumor = Net::Nostr::DirectMessage->create(
     sender_pubkey => $alice_key->pubkey_hex,
-    content       => encode_json($payload),
+    content       => JSON::encode_json($payload),
     recipients    => [$bob_key->pubkey_hex],
   );
   my ($wrap) = Net::Nostr::DirectMessage->wrap_for_recipients(
@@ -2448,7 +2447,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
     sender_key  => $alice_key,
     skip_sender => 1,
   );
-  my $e2ee_body = '+overnet-e2ee-v1 ' . encode_base64(encode_json($wrap->to_hash), '');
+  my $e2ee_body = '+overnet-e2ee-v1 ' . encode_base64(JSON::encode_json($wrap->to_hash), '');
 
   _write_client_line($alice, 'PRIVMSG bob :' . $e2ee_body);
   ok $host->pump_until(
@@ -2480,7 +2479,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
     recipient_key => $bob_key,
   );
   is $received_rumor->kind, 14, 'bob can locally unwrap a kind 14 rumor';
-  is_deeply decode_json($received_rumor->content), $payload,
+  is_deeply JSON::decode_json($received_rumor->content), $payload,
     'bob can locally decrypt the original private-message payload';
 
   my $opaque_item = _find_emitted_item(
@@ -2541,7 +2540,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
       signing_key_file => $key_path,
       adapter_config   => {},
       tls              => {
-        enabled          => JSON::PP::true,
+        enabled          => JSON::true,
         cert_chain_file  => $tls_cert_path,
         private_key_file => $tls_key_path,
         min_version      => 'TLSv1.2',
@@ -3290,7 +3289,7 @@ subtest 'IRC server program authenticates authoritative clients through SASL NOS
     'non-relay authoritative SASL challenge carries a random challenge token';
 
   my $sasl_response_payload = encode_base64(
-    encode_json({
+    JSON::encode_json({
       auth_event => _build_authoritative_auth_event_hash(
         key       => $alice_key,
         challenge => $challenge_payload->{challenge},
@@ -4446,7 +4445,7 @@ subtest 'IRC server program establishes authoritative relay delegation through S
     'relay-backed SASL challenge carries a delegation expiration';
 
   my $sasl_response_payload = encode_base64(
-    encode_json({
+    JSON::encode_json({
       auth_event => _build_authoritative_auth_event_hash(
         key       => $alice_key,
         challenge => $challenge_payload->{challenge},
@@ -5160,7 +5159,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
         'instance B post-join lines: '
           . (@bob_b_post_join_lines ? join(' | ', @bob_b_post_join_lines) : '(none)'),
         'instance B last subscriptions.open request: '
-          . encode_json(
+          . JSON::encode_json(
               _last_request_matching(
                 $host_b->transcript,
                 'from_program',
@@ -5168,7 +5167,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
               ) || {}
             ),
         'instance B last nostr.publish_event request: '
-          . encode_json(
+          . JSON::encode_json(
               _last_request_matching(
                 $host_b->transcript,
                 'from_program',
@@ -5379,7 +5378,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
           },
         ),
     'instance A last authoritative derive request: '
-      . encode_json(
+      . JSON::encode_json(
           _last_request_matching(
             $host_a->transcript,
             'from_program',
@@ -5387,7 +5386,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
           ) || {}
         ),
     'instance A last subscription snapshot request: '
-      . encode_json(
+      . JSON::encode_json(
           _last_request_matching(
             $host_a->transcript,
             'from_program',
@@ -5395,7 +5394,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
           ) || {}
         ),
     'instance A last fresh INVITE map_input request: '
-      . encode_json(
+      . JSON::encode_json(
           _last_request_matching(
             $host_a->transcript,
             'from_program',
@@ -5408,7 +5407,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
           ) || {}
         ),
     'instance A last nostr.publish_event request: '
-      . encode_json(
+      . JSON::encode_json(
           _last_request_matching(
             $host_a->transcript,
             'from_program',

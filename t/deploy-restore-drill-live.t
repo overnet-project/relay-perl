@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use AnyEvent;
 use File::Spec;
@@ -7,7 +6,7 @@ use File::Temp qw(tempdir);
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use MIME::Base64 qw(encode_base64);
 use Net::Nostr::Client;
 use Net::Nostr::Event;
@@ -86,7 +85,7 @@ sub _wait_for_health {
       local $/;
       my $raw = <$fh>;
       close $fh;
-      my $decoded = eval { decode_json($raw) };
+      my $decoded = eval { JSON::decode_json($raw) };
       return $decoded if ref($decoded) eq 'HASH' && ($decoded->{status} || '') eq 'ready';
     }
     sleep 0.05;
@@ -203,7 +202,7 @@ sub _build_authoritative_auth_payload {
       [ 'challenge', $args{challenge} ],
     ],
   );
-  return encode_base64(encode_json($event->to_hash), '');
+  return encode_base64(JSON::encode_json($event->to_hash), '');
 }
 
 sub _build_authoritative_delegate_payload {
@@ -221,7 +220,7 @@ sub _build_authoritative_delegate_payload {
       (defined($args{nick}) ? ([ 'nick', $args{nick} ]) : ()),
     ],
   );
-  return encode_base64(encode_json($event->to_hash), '');
+  return encode_base64(JSON::encode_json($event->to_hash), '');
 }
 
 sub _publish_nostr_event_to_relay {

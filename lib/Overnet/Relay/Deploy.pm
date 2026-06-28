@@ -1,10 +1,10 @@
 package Overnet::Relay::Deploy;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use parent 'Overnet::Relay';
 
+use JSON ();
 use Net::Nostr::Message;
 
 sub _handle_event {
@@ -107,8 +107,7 @@ sub _service_policy_http_error {
 
 sub _service_policy_http_body {
   my ($self, $message) = @_;
-  require JSON::PP;
-  return JSON::PP->new->utf8->canonical->encode({
+  return JSON->new->utf8->canonical->encode({
     error => {
       code => ($message =~ /\A([a-z_]+):/ ? $1 : 'policy_denied'),
       message => $message,

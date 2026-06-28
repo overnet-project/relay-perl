@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use Cwd qw(getcwd);
 use File::Spec;
@@ -20,14 +19,24 @@ is $args->{ABSTRACT}, 'Perl reference implementation of the Overnet relay and re
 is $args->{VERSION_FROM}, 'lib/Overnet/Relay.pm', 'version comes from relay module';
 is $args->{LICENSE}, 'gpl_3', 'license';
 is $args->{MIN_PERL_VERSION}, '5.024', 'minimum Perl version';
+is_deeply(
+  $args->{CONFIGURE_REQUIRES},
+  {
+    'ExtUtils::MakeMaker' => 0,
+    'strictures'         => 2,
+  },
+  'configure prerequisites include modules required to load Makefile.PL',
+);
 
 is_deeply(
   $args->{PREREQ_PM},
   {
     'AnyEvent'    => 0,
     'Class::Tiny' => 0,
+    'JSON'        => 0,
     'Net::Nostr'  => 0,
     'Overnet'     => 0.001,
+    'strictures'  => 2,
     'URI'         => 0,
   },
   'runtime prerequisites stay on top-level non-core distributions',

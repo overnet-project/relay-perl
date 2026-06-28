@@ -1,12 +1,11 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json);
+use JSON ();
 use POSIX qw(WNOHANG);
 use Symbol qw(gensym);
 use Test::More;
@@ -75,7 +74,7 @@ sub _wait_for_health {
       local $/;
       my $raw = <$fh>;
       close $fh;
-      my $decoded = eval { decode_json($raw) };
+      my $decoded = eval { JSON::decode_json($raw) };
       return $decoded if ref($decoded) eq 'HASH' && ($decoded->{status} || '') eq 'ready';
     }
     sleep 0.05;

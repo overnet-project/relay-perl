@@ -1,14 +1,13 @@
 package Overnet::Relay;
 
-use strict;
-use warnings;
+use strictures 2;
 
 our $VERSION = '0.001';
 
 use parent 'Net::Nostr::Relay';
 
 use AnyEvent;
-use JSON::PP ();
+use JSON ();
 use Socket qw(MSG_PEEK);
 use URI::Escape qw(uri_unescape);
 
@@ -42,7 +41,7 @@ use Class::Tiny qw(
   pricing_url
 );
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 my %VALID_POLICY = map { $_ => 1 } qw(open auth paid closed);
 my %VALID_OUTCOME_PREFIX = map { $_ => 1 } qw(
   accepted invalid unauthorized payment_required policy_denied
@@ -269,7 +268,7 @@ sub _handle_object_http_request {
     body => {
       object_type => $object_type,
       object_id => $object_id,
-      removed => _object_is_removed($state_event, $removal_event) ? JSON::PP::true : JSON::PP::false,
+      removed => _object_is_removed($state_event, $removal_event) ? JSON::true : JSON::false,
       state_event => $state_event ? $state_event->to_hash : undef,
       removal_event => $removal_event ? $removal_event->to_hash : undef,
     },

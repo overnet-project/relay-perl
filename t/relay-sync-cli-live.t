@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use AnyEvent;
 use AnyEvent::WebSocket::Client;
@@ -8,7 +7,7 @@ use File::Temp qw(tempdir);
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use Net::Nostr::Filter;
 use Net::Nostr::Key;
 use Net::Nostr::Message;
@@ -110,7 +109,7 @@ sub _http_request {
 sub _decode_http_json_body {
   my ($response) = @_;
   my (undef, $body) = split /\r\n\r\n/, $response, 2;
-  return decode_json($body);
+  return JSON::decode_json($body);
 }
 
 sub _wait_for_relay_ready {
@@ -180,7 +179,7 @@ sub _create_overnet_event {
   return $args{key}->create_event(
     kind => $args{kind},
     tags => \@tags,
-    content => encode_json({
+    content => JSON::encode_json({
       provenance => { type => 'native' },
       body       => $args{body},
     }),
@@ -229,7 +228,7 @@ subtest 'relay sync CLI loads static config and syncs one peer into the local re
     my $config_path = File::Spec->catfile($tempdir, 'relay-sync.json');
     open my $config_fh, '>:raw', $config_path
       or die "Can't create relay sync config: $!";
-    print {$config_fh} encode_json({
+    print {$config_fh} JSON::encode_json({
       local_url => "ws://127.0.0.1:$relay_b_port",
       timeout_seconds => 5,
       peers => [
@@ -267,7 +266,7 @@ subtest 'relay sync CLI loads static config and syncs one peer into the local re
       or diag $sync_stderr;
     ok defined($sync_stdout) && length($sync_stdout), 'relay sync CLI prints JSON summary';
 
-    my $summary = decode_json($sync_stdout);
+    my $summary = JSON::decode_json($sync_stdout);
     is $summary->{local_url}, "ws://127.0.0.1:$relay_b_port", 'summary records local relay URL';
     is $summary->{peer_count}, 1, 'summary reports one configured peer';
     is $summary->{results}[0]{name}, 'relay-a', 'summary records peer name';

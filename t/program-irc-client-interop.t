@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 use Test::More;
 use File::Spec;
 use File::Temp qw(tempdir tempfile);
@@ -9,7 +8,7 @@ use IO::Socket::INET;
 use IO::Socket::SSL qw(SSL_VERIFY_NONE);
 use IO::Socket::SSL::Utils qw(CERT_create PEM_cert2file PEM_key2file);
 use IPC::Open3 qw(open3);
-use JSON::PP qw(decode_json encode_json);
+use JSON ();
 use MIME::Base64 qw(encode_base64);
 use Overnet::Core::Nostr;
 use POSIX qw(WNOHANG);
@@ -75,7 +74,7 @@ sub _build_authoritative_auth_event_hash {
 sub _build_authoritative_auth_payload {
   my (%args) = @_;
   return encode_base64(
-    encode_json(
+    JSON::encode_json(
       _build_authoritative_auth_event_hash(%args)
     ),
     '',
@@ -249,7 +248,7 @@ sub _read_ready_json {
   my $line = <$handle>;
   return undef unless defined $line;
   chomp $line;
-  return decode_json($line);
+  return JSON::decode_json($line);
 }
 
 sub _slurp_handle {
@@ -278,9 +277,8 @@ sub _spawn_live_irc_server {
   open my $fh, '>', $script_path
     or die "Unable to write $script_path: $!";
   print {$fh} <<'PERL';
-use strict;
-use warnings;
-use JSON::PP qw(encode_json);
+use strictures 2;
+use JSON ();
 use File::Path qw(make_path);
 use File::Spec;
 use Net::Nostr::Group ();
@@ -308,7 +306,7 @@ my %config = (
   signing_key_file => $signing_key_file,
   adapter_config   => (
     defined($ENV{OVERNET_ADAPTER_CONFIG_JSON}) && length($ENV{OVERNET_ADAPTER_CONFIG_JSON})
-      ? (JSON::PP::decode_json($ENV{OVERNET_ADAPTER_CONFIG_JSON}))
+      ? (JSON::decode_json($ENV{OVERNET_ADAPTER_CONFIG_JSON}))
       : {}
   ),
 );
@@ -402,7 +400,7 @@ while (1) {
   die "server exited unexpectedly during startup\n" if $host->has_exited;
 }
 
-print encode_json($ready), "\n";
+print JSON::encode_json($ready), "\n";
 $| = 1;
 
 local $SIG{TERM} = sub {
@@ -430,7 +428,7 @@ PERL
     OVERNET_PROGRAM_PATH     => $program_path,
     OVERNET_LIVE_PORT        => $listen_port,
     OVERNET_LIVE_STATE_DIR   => $tmpdir,
-    OVERNET_ADAPTER_CONFIG_JSON => encode_json($adapter_config),
+    OVERNET_ADAPTER_CONFIG_JSON => JSON::encode_json($adapter_config),
     OVERNET_SEED_CHANNEL     => (defined($seed_channel) ? $seed_channel : ''),
     OVERNET_TLS_CERT         => ($tls ? $tls->{cert_chain_file} : ''),
     OVERNET_TLS_KEY          => ($tls ? $tls->{private_key_file} : ''),

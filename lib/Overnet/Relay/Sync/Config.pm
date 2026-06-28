@@ -1,14 +1,13 @@
 package Overnet::Relay::Sync::Config;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use Carp qw(croak);
-use JSON::PP ();
+use JSON ();
 
 use Net::Nostr::Filter;
 
-my $JSON = JSON::PP->new->utf8->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
 sub load_file {
   my ($class, $path) = @_;

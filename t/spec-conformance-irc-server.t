@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use strictures 2;
 
 use FindBin;
 use File::Spec;

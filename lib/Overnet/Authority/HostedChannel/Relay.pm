@@ -1,7 +1,6 @@
 package Overnet::Authority::HostedChannel::Relay;
 
-use strict;
-use warnings;
+use strictures 2;
 
 use Exporter qw(import);
 
