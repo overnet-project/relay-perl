@@ -16,6 +16,7 @@ use Net::Nostr::Filter;
 use Net::Nostr::Message;
 use Overnet::Core::Validator ();
 use Overnet::Relay::Info;
+use Overnet::Relay::ProfileContracts;
 
 use Class::Tiny qw(
   name
@@ -34,6 +35,9 @@ use Class::Tiny qw(
   max_negentropy_sessions
   core_version
   relay_profile
+  profile_contract_policy
+  profile_contracts
+  _profile_contract_index
   service_policies
   pricing_url
 );
@@ -53,6 +57,12 @@ sub new {
   $args{max_negentropy_sessions} //= 8;
   $args{supported_nips} = _normalized_supported_nips($args{supported_nips});
   $args{service_policies} = _validated_service_policies($args{service_policies});
+  $args{_profile_contract_index} = Overnet::Relay::ProfileContracts->new(
+    contracts => $args{profile_contracts},
+    policy => $args{profile_contract_policy},
+  );
+  $args{profile_contract_policy} = $args{_profile_contract_index}->policy;
+  $args{profile_contracts} = $args{_profile_contract_index}->contracts;
 
   my $self = $class->SUPER::new(%args);
   $self->relay_info($self->_build_relay_info_document);
@@ -80,6 +90,7 @@ sub _build_relay_info_document {
     map { defined $limitation->{$_} ? ($_ => $limitation->{$_}) : () }
       keys %{$limitation}
   };
+  my $profile_contract_metadata = $self->_profile_contract_index->metadata;
 
   return Overnet::Relay::Info->new(
     name => $self->name,
@@ -107,6 +118,7 @@ sub _build_relay_info_document {
       ],
       limits => $limits,
       service_policies => $self->service_policies,
+      (defined $profile_contract_metadata ? (profile_contracts => $profile_contract_metadata) : ()),
       (defined $self->pricing_url ? (pricing_url => $self->pricing_url) : ()),
     },
   );
@@ -578,6 +590,10 @@ sub _validate_overnet_publish {
   my @mirror_errors = $self->_mirror_tag_errors($event);
   return 'invalid: ' . $mirror_errors[0]
     if @mirror_errors;
+
+  my $profile_error = $self->_profile_contract_index->validate_event($event);
+  return 'invalid: ' . $profile_error
+    if $profile_error;
 
   return undef;
 }

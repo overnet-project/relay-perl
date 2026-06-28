@@ -34,6 +34,7 @@ my %opt = (
   max_connections_per_ip => undef,
   event_rate_limit => undef,
   min_pow_difficulty => undef,
+  profile_contract_policy => undef,
   idle_timeout => undef,
   shutdown_timeout => undef,
   store_file => undef,
@@ -42,6 +43,7 @@ my %opt = (
 my $help = 0;
 my $host = $opt{host};
 my $port = $opt{port};
+my @profile_contract_paths;
 my @service_policy_args;
 my $health_file;
 my $log_file;
@@ -64,6 +66,8 @@ GetOptions(
   'max-connections-per-ip=i' => \$opt{max_connections_per_ip},
   'event-rate-limit=s' => \$opt{event_rate_limit},
   'min-pow-difficulty=i' => \$opt{min_pow_difficulty},
+  'profile-contract=s' => \@profile_contract_paths,
+  'profile-contract-policy=s' => \$opt{profile_contract_policy},
   'idle-timeout=i' => \$opt{idle_timeout},
   'shutdown-timeout=i' => \$opt{shutdown_timeout},
   'service-policy=s' => \@service_policy_args,
@@ -126,6 +130,9 @@ if (defined $relay_args{store_file}) {
 }
 if (@service_policy_args) {
   $relay_args{service_policies} = _parse_service_policies(@service_policy_args);
+}
+if (@profile_contract_paths) {
+  $relay_args{profile_contracts} = _load_profile_contracts(@profile_contract_paths);
 }
 
 my $relay = Overnet::Relay::Deploy->new(%relay_args);
@@ -197,6 +204,32 @@ sub _parse_service_policies {
   return \%policies;
 }
 
+sub _load_profile_contracts {
+  my (@paths) = @_;
+  my @contracts;
+  my $json = JSON::PP->new->utf8;
+
+  for my $path (@paths) {
+    die "--profile-contract must be a non-empty string\n"
+      if !defined($path) || ref($path) || $path eq '';
+
+    open my $fh, '<:raw', $path
+      or die "Can't open profile contract file $path: $!\n";
+    my $content = do { local $/; <$fh> };
+    close $fh
+      or die "Can't close profile contract file $path: $!\n";
+
+    my $contract = eval { $json->decode($content) };
+    die "invalid profile contract JSON in $path: $@\n" if $@;
+    die "profile contract file $path must contain a JSON object\n"
+      unless ref($contract) eq 'HASH';
+
+    push @contracts, $contract;
+  }
+
+  return \@contracts;
+}
+
 sub _write_health_file {
   my ($path, $payload) = @_;
   return 1 unless defined $path;
@@ -240,6 +273,8 @@ Usage: overnet-relay.pl [options]
   --max-connections-per-ip N
   --event-rate-limit COUNT/SECONDS
   --min-pow-difficulty N
+  --profile-contract PATH
+  --profile-contract-policy MODE
   --idle-timeout SECONDS
   --shutdown-timeout SECONDS
   --service-policy NAME=VALUE
