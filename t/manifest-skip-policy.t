@@ -55,5 +55,5 @@ sub _read_lines {
   my ($path) = @_;
   open my $fh, '<', $path or die "open $path: $!";
   chomp(my @lines = <$fh>);
-  return grep { length && $_ !~ /\A#/ } @lines;
+  return grep { length && $_ !~ /\A\#/mx } @lines;
 }

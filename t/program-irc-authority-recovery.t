@@ -10,7 +10,7 @@ use Overnet::Authority::HostedChannel;
 use Overnet::Program::IRC::Authority::Coordinator;
 
 {
-  package Local::RecoveryCoordinatorServer;
+  package Local::RecoveryCoordinatorServer; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   sub new {
     return bless {
@@ -99,7 +99,7 @@ use Overnet::Program::IRC::Authority::Coordinator;
     }
 
     for my $key (keys %{$filter}) {
-      next unless $key =~ /\A#(.+)\z/;
+      next unless $key =~ /\A\#(.+)\z/mx;
       my $tag_name = $1;
       my %allowed = map { $_ => 1 } @{$filter->{$key} || []};
       my $matched = 0;
@@ -135,7 +135,7 @@ use Overnet::Program::IRC::Authority::Coordinator;
   }
 
   sub _is_authoritative_channel {
-    return defined($_[1]) && !ref($_[1]) && $_[1] =~ /\A#/;
+    return defined($_[1]) && !ref($_[1]) && $_[1] =~ /\A\#/mx;
   }
 
   sub _sort_authoritative_events {

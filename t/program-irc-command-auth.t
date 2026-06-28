@@ -25,7 +25,7 @@ can_ok(
 );
 
 {
-  package Local::MockAuthCommandServer;
+  package Local::MockAuthCommandServer; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   sub new {
     return bless {
@@ -152,34 +152,34 @@ my $server_path = File::Spec->catfile(
 );
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
-my $server_source = do { local $/; <$server_fh> };
+my $server_source = do { local $/ = undef; <$server_fh> };
 close $server_fh;
 
-like $server_source, qr/use Overnet::Program::IRC::Command::Auth;/,
+like $server_source, qr/use\ Overnet::Program::IRC::Command::Auth;/mx,
   'Server.pm loads the focused auth command module';
-like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_cap/,
+like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_cap/mx,
   'Server.pm delegates CAP handling to the auth command module';
-like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_authenticate/,
+like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_authenticate/mx,
   'Server.pm delegates AUTHENTICATE handling to the auth command module';
-like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_overnetauth/,
+like $server_source, qr/Overnet::Program::IRC::Command::Auth::handle_overnetauth/mx,
   'Server.pm delegates OVERNETAUTH handling to the auth command module';
-unlike $server_source, qr/\nsub _handle_cap_command \{/,
+unlike $server_source, qr/\nsub\ _handle_cap_command\ \{/mx,
   'Server.pm no longer defines CAP handling inline';
-unlike $server_source, qr/\nsub _handle_authenticate_command \{/,
+unlike $server_source, qr/\nsub\ _handle_authenticate_command\ \{/mx,
   'Server.pm no longer defines AUTHENTICATE handling inline';
-unlike $server_source, qr/\nsub _start_sasl_nostr_exchange \{/,
+unlike $server_source, qr/\nsub\ _start_sasl_nostr_exchange\ \{/mx,
   'Server.pm no longer defines SASL challenge state transitions inline';
-unlike $server_source, qr/\nsub _complete_sasl_exchange \{/,
+unlike $server_source, qr/\nsub\ _complete_sasl_exchange\ \{/mx,
   'Server.pm no longer defines SASL completion inline';
-unlike $server_source, qr/\nsub _reset_sasl_state \{/,
+unlike $server_source, qr/\nsub\ _reset_sasl_state\ \{/mx,
   'Server.pm no longer defines SASL reset inline';
-unlike $server_source, qr/\nsub _apply_authoritative_auth_validation \{/,
+unlike $server_source, qr/\nsub\ _apply_authoritative_auth_validation\ \{/mx,
   'Server.pm no longer defines authoritative auth binding inline';
-unlike $server_source, qr/\nsub _clear_authoritative_binding \{/,
+unlike $server_source, qr/\nsub\ _clear_authoritative_binding\ \{/mx,
   'Server.pm no longer defines authoritative auth clearing inline';
-unlike $server_source, qr/\nsub _ensure_authoritative_delegate_offer \{/,
+unlike $server_source, qr/\nsub\ _ensure_authoritative_delegate_offer\ \{/mx,
   'Server.pm no longer defines delegation offer state inline';
-unlike $server_source, qr/\nsub _accept_authoritative_delegate_event \{/,
+unlike $server_source, qr/\nsub\ _accept_authoritative_delegate_event\ \{/mx,
   'Server.pm no longer defines delegation acceptance inline';
 
 done_testing;

@@ -81,6 +81,7 @@ sub _stop_relay_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_relay_ready {
@@ -101,7 +102,7 @@ sub _wait_for_relay_ready {
           '',
         ),
       );
-      return defined $response && $response =~ /\AHTTP\/1\.[01] 200 / ? 1 : 0;
+      return defined $response && $response =~ /\AHTTP\/1\.[01]\ 200\ /mx ? 1 : 0;
     };
     if ($ok) {
       return 1;
@@ -126,7 +127,7 @@ sub _http_request {
   print {$socket} $args{request}
     or die "Can't write HTTP request to relay: $!";
 
-  my $response = do { local $/; <$socket> };
+  my $response = do { local $/ = undef; <$socket> };
   close $socket;
   return $response;
 }
@@ -197,15 +198,15 @@ subtest 'relay CLI exposes deploy-time operational controls' => sub {
     $relay_script,
     '--help',
   );
-  my $stdout_text = do { local $/; <$stdout> };
+  my $stdout_text = do { local $/ = undef; <$stdout> };
   close $stdout;
   close $stderr;
   waitpid($pid, 0);
 
-  like $stdout_text, qr/--max-connections-per-ip\b/, 'relay help exposes connection caps';
-  like $stdout_text, qr/--event-rate-limit\b/, 'relay help exposes event rate limiting';
-  like $stdout_text, qr/--min-pow-difficulty\b/, 'relay help exposes PoW control';
-  like $stdout_text, qr/--service-policy\b/, 'relay help exposes service policy control';
+  like $stdout_text, qr/--max-connections-per-ip\b/mx, 'relay help exposes connection caps';
+  like $stdout_text, qr/--event-rate-limit\b/mx, 'relay help exposes event rate limiting';
+  like $stdout_text, qr/--min-pow-difficulty\b/mx, 'relay help exposes PoW control';
+  like $stdout_text, qr/--service-policy\b/mx, 'relay help exposes service policy control';
 };
 
 subtest 'relay enforces max-connections-per-ip' => sub {
@@ -272,7 +273,7 @@ subtest 'relay enforces event rate limits on publish' => sub {
     is scalar(@ok_messages), 2, 'rate-limit flow returns two OK messages';
     ok $ok_messages[0]->accepted, 'first publish is accepted';
     ok !$ok_messages[1]->accepted, 'second publish is rejected';
-    like $ok_messages[1]->message, qr/rate limited/i, 'second publish reports rate limiting';
+    like $ok_messages[1]->message, qr/rate\ limited/imx, 'second publish reports rate limiting';
 
     $conn_result->{conn}->close;
   };
@@ -317,7 +318,7 @@ subtest 'relay enforces closed publish and object-read service policies' => sub 
 
     my ($ok) = grep { $_->type eq 'OK' } @received;
     ok !$ok->accepted, 'publish is rejected when publish policy is closed';
-    like $ok->message, qr/policy_denied/i, 'publish rejection reports policy denial';
+    like $ok->message, qr/policy_denied/imx, 'publish rejection reports policy denial';
     $conn_result->{conn}->close;
 
     my $response = _http_request(
@@ -331,9 +332,9 @@ subtest 'relay enforces closed publish and object-read service policies' => sub 
         '',
       ),
     );
-    like $response, qr/\AHTTP\/1\.[01] 403 /, 'closed object-read policy returns HTTP 403';
-    my (undef, $body) = split /\r\n\r\n/, $response, 2;
-    like $body, qr/policy_denied/i, 'object-read policy denial is reported in the body';
+    like $response, qr/\AHTTP\/1\.[01]\ 403\ /mx, 'closed object-read policy returns HTTP 403';
+    my (undef, $body) = split /\r\n\r\n/mx, $response, 2;
+    like $body, qr/policy_denied/imx, 'object-read policy denial is reported in the body';
   };
   my $error = $@;
   _stop_relay_process($proc);

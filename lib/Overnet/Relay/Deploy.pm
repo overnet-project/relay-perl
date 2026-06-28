@@ -70,10 +70,10 @@ sub _service_policy_message {
   my ($self, $service, $conn_id) = @_;
   my $policies = $self->service_policies || {};
   my $policy = $policies->{$service} || 'open';
-  return undef if $policy eq 'open';
+  return if $policy eq 'open';
 
   if ($policy eq 'auth') {
-    return undef if $self->_connection_is_authenticated($conn_id);
+    return if $self->_connection_is_authenticated($conn_id);
     return 'unauthorized: service requires authentication';
   }
 
@@ -87,13 +87,13 @@ sub _service_policy_message {
 sub _service_policy_http_error {
   my ($self, $service) = @_;
   my $message = $self->_service_policy_message($service, undef);
-  return undef unless defined $message;
+  return unless defined $message;
 
   my $status_line = 'HTTP/1.1 403 Forbidden';
   $status_line = 'HTTP/1.1 401 Unauthorized'
-    if $message =~ /\Aunauthorized:/;
+    if $message =~ /\Aunauthorized:/mx;
   $status_line = 'HTTP/1.1 402 Payment Required'
-    if $message =~ /\Apayment_required:/;
+    if $message =~ /\Apayment_required:/mx;
 
   return join("\r\n",
     $status_line,
@@ -109,7 +109,7 @@ sub _service_policy_http_body {
   my ($self, $message) = @_;
   return JSON->new->utf8->canonical->encode({
     error => {
-      code => ($message =~ /\A([a-z_]+):/ ? $1 : 'policy_denied'),
+      code => ($message =~ /\A([a-z_]+):/mx ? $1 : 'policy_denied'),
       message => $message,
     },
   });

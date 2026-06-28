@@ -38,15 +38,15 @@ sub _free_port {
 sub _shell_quote {
   my ($value) = @_;
   $value = '' unless defined $value;
-  $value =~ s/'/'"'"'/g;
+  $value =~ s/'/'"'"'/gmx;
   return "'$value'";
 }
 
 sub _tcl_quote {
   my ($value) = @_;
   $value = '' unless defined $value;
-  $value =~ s/\\/\\\\/g;
-  $value =~ s/"/\\"/g;
+  $value =~ s/\\/\\\\/gmx;
+  $value =~ s/"/\\"/gmx;
   return '"' . $value . '"';
 }
 
@@ -145,13 +145,14 @@ sub _write_client_line {
       unless defined $written;
     $offset += $written;
   }
+  return;
 }
 
 sub _read_client_line {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
     die "Timed out waiting for IRC client line at $caller_file line $caller_line\n"
@@ -163,19 +164,19 @@ sub _read_client_line {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
 sub _read_client_line_optional {
   my ($client, $timeout_ms) = @_;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
-    return undef unless @ready;
+    return unless @ready;
 
     my $bytes = sysread($client->{socket}, my $chunk, 4096);
     die "IRC client disconnected unexpectedly\n"
@@ -183,9 +184,9 @@ sub _read_client_line_optional {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
@@ -203,10 +204,11 @@ sub _observer_join_channel {
     'observer receives 422';
   is _read_client_line($client, 3_000), ':observer JOIN #overnet',
     'observer receives its JOIN echo';
-  like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local 353 observer = #overnet :observer\z/,
+  like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local\ 353\ observer\ =\ \#overnet\ :observer\z/mx,
     'observer receives NAMES bootstrap';
   is _read_client_line($client, 3_000), ':overnet.irc.local 366 observer #overnet :End of /NAMES list.',
     'observer receives end-of-names';
+  return;
 }
 
 sub _drain_client_text {
@@ -244,9 +246,9 @@ sub _read_ready_json {
   my ($handle, $timeout_ms) = @_;
   my $selector = IO::Select->new($handle);
   my @ready = $selector->can_read($timeout_ms / 1000);
-  return undef unless @ready;
+  return unless @ready;
   my $line = <$handle>;
-  return undef unless defined $line;
+  return unless defined $line;
   chomp $line;
   return JSON::decode_json($line);
 }
@@ -490,6 +492,7 @@ sub _stop_spawned_process {
     kill 'KILL', $proc->{pid};
     waitpid($proc->{pid}, 0);
   }
+  return;
 }
 
 sub _spawn_xvfb {
@@ -587,19 +590,19 @@ sub _authenticate_observer_authoritative {
   _write_client_line($client, 'USER observer 0 * :Observer');
   _write_client_line($client, 'CAP END');
 
-  like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local CAP \* LS :/,
+  like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local\ CAP\ \*\ LS\ :/mx,
     'authoritative observer receives CAP LS';
   is _read_client_line($client, 3_000), ':overnet.irc.local CAP * ACK :message-tags server-time account-tag account-notify',
     'authoritative observer receives CAP ACK';
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+ )?:overnet\.irc\.local 001 observer :Welcome to Overnet IRC\z/,
+  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 001\ observer\ :Welcome\ to\ Overnet\ IRC\z/mx,
     'authoritative observer receives 001';
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+ )?:overnet\.irc\.local 005 observer /,
+  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 005\ observer\ /mx,
     'authoritative observer receives 005';
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+ )?:overnet\.irc\.local 422 observer :MOTD File is missing\z/,
+  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 422\ observer\ :MOTD\ File\ is\ missing\z/mx,
     'authoritative observer receives 422';
 
   _write_client_line($client, 'OVERNETAUTH CHALLENGE');
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+ )?:overnet\.irc\.local NOTICE observer :OVERNETAUTH CHALLENGE \Q@{[_fixed_authoritative_auth_challenge()]}\E\z/,
+  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ NOTICE\ observer\ :OVERNETAUTH\ CHALLENGE\ \Q@{[_fixed_authoritative_auth_challenge()]}\E\z/mx,
     'authoritative observer receives fixed auth challenge';
 
   _write_client_line(
@@ -610,10 +613,10 @@ sub _authenticate_observer_authoritative {
       scope     => _authoritative_auth_scope(),
     ),
   );
-  my $auth_text = _read_client_text_until($client, qr/OVERNETAUTH AUTH [0-9a-f]{64}\z/, 3_000);
-  like $auth_text, qr/(?:\A|\n)(?:\@time=\S+ )?(?:\@account=[0-9a-f]{64} )?:observer![^ ]+ ACCOUNT [0-9a-f]{64}(?:\n|\z)/,
+  my $auth_text = _read_client_text_until($client, qr/OVERNETAUTH\ AUTH\ [0-9a-f]{64}\z/mx, 3_000);
+  like $auth_text, qr/(?:\A|\n)(?:\@time=\S+\ )?(?:\@account=[0-9a-f]{64}\ )?:observer![^ ]+\ ACCOUNT\ [0-9a-f]{64}(?:\n|\z)/mx,
     'authoritative observer sees account identity state during auth';
-  like $auth_text, qr/(?:\@time=\S+ )?:overnet\.irc\.local NOTICE observer :OVERNETAUTH AUTH [0-9a-f]{64}/,
+  like $auth_text, qr/(?:\@time=\S+\ )?:overnet\.irc\.local\ NOTICE\ observer\ :OVERNETAUTH\ AUTH\ [0-9a-f]{64}/mx,
     'authoritative observer authenticates';
 
   return $client;
@@ -909,6 +912,7 @@ sub _write_weechat_command {
     or die "Unable to open WeeChat fifo $proc->{fifo}: $!";
   print {$fh} $command . "\n";
   close $fh;
+  return;
 }
 
 sub _stop_weechat_smoke {
@@ -1180,9 +1184,9 @@ SKIP: {
   is $result->{exit_code}, 0, 'irssi smoke run exits cleanly';
 
   my $observer_text = _drain_client_text($observer);
-  like $observer_text, qr/:irssi_smoke JOIN #overnet/,
+  like $observer_text, qr/:irssi_smoke\ JOIN\ \#overnet/mx,
     'observer sees irssi join the channel';
-  like $observer_text, qr/:irssi_smoke PRIVMSG #overnet :hi-from-irssi/,
+  like $observer_text, qr/:irssi_smoke\ PRIVMSG\ \#overnet\ :hi-from-irssi/mx,
     'observer sees irssi send a channel message';
 
   my $shutdown_ok = eval {
@@ -1207,8 +1211,8 @@ SKIP: {
   my $result = _spawn_weechat_smoke(port => $server->{ready_details}{listen_port});
   ok $result->{fifo}, 'WeeChat exposes a fifo control pipe';
 
-  my $observer_text = _read_client_text_until($observer, qr/:weechat_smoke JOIN #overnet/, 8_000);
-  like $observer_text, qr/:weechat_smoke JOIN #overnet/,
+  my $observer_text = _read_client_text_until($observer, qr/:weechat_smoke\ JOIN\ \#overnet/mx, 8_000);
+  like $observer_text, qr/:weechat_smoke\ JOIN\ \#overnet/mx,
     'observer sees WeeChat join the channel';
 
   my $message_text = '';
@@ -1221,10 +1225,10 @@ SKIP: {
     'irc.127.0.0.1.#overnet */quote PRIVMSG #overnet :hi-from-weechat',
   ) {
     _write_weechat_command($result, $command);
-    $message_text = _read_client_text_until($observer, qr/:weechat_smoke PRIVMSG #overnet :hi-from-weechat/, 1_500);
-    last if $message_text =~ /:weechat_smoke PRIVMSG #overnet :hi-from-weechat/;
+    $message_text = _read_client_text_until($observer, qr/:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx, 1_500);
+    last if $message_text =~ /:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx;
   }
-  like $message_text, qr/:weechat_smoke PRIVMSG #overnet :hi-from-weechat/,
+  like $message_text, qr/:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx,
     'observer sees WeeChat send a channel message';
 
   my $stop = _stop_weechat_smoke($result);
@@ -1260,14 +1264,14 @@ SKIP: {
   );
   ok $result->{existing_ok}, 'HexChat exposes an existing instance for automation';
 
-  my $observer_text = _read_client_text_until($observer, qr/:([^ ]+) JOIN #overnet/, 10_000);
-  like $observer_text, qr/:([^ ]+) JOIN #overnet/,
+  my $observer_text = _read_client_text_until($observer, qr/:([^ ]+)\ JOIN\ \#overnet/mx, 10_000);
+  like $observer_text, qr/:([^ ]+)\ JOIN\ \#overnet/mx,
     'observer sees HexChat join the channel';
-  my ($hex_nick) = $observer_text =~ /:([^ ]+) JOIN #overnet/;
+  my ($hex_nick) = $observer_text =~ /:([^ ]+)\ JOIN\ \#overnet/mx;
   ok defined $hex_nick && length $hex_nick, 'HexChat exposes a joined nick';
 
-  my $message_text = _read_client_text_until($observer, qr/:\Q$hex_nick\E PRIVMSG #overnet :hi-from-hexchat/, 5_000);
-  like $message_text, qr/:\Q$hex_nick\E PRIVMSG #overnet :hi-from-hexchat/,
+  my $message_text = _read_client_text_until($observer, qr/:\Q$hex_nick\E\ PRIVMSG\ \#overnet\ :hi-from-hexchat/mx, 5_000);
+  like $message_text, qr/:\Q$hex_nick\E\ PRIVMSG\ \#overnet\ :hi-from-hexchat/mx,
     'observer sees HexChat send a channel message';
 
   my $stop = _stop_hexchat_smoke($result);

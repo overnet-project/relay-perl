@@ -13,9 +13,9 @@ subtest 'relay help exposes profile contract controls' => sub {
   my $result = _run($^X, $relay_script, '--help');
 
   is $result->{exit}, 0, 'help exits successfully';
-  like $result->{stdout}, qr/--profile-contract\b/,
+  like $result->{stdout}, qr/--profile-contract\b/mx,
     'help exposes profile contract file option';
-  like $result->{stdout}, qr/--profile-contract-policy\b/,
+  like $result->{stdout}, qr/--profile-contract-policy\b/mx,
     'help exposes profile contract policy option';
 };
 
@@ -30,7 +30,7 @@ subtest 'relay validates profile contract CLI inputs before listening' => sub {
     '--profile-contract', $missing_path,
   );
   isnt $missing->{exit}, 0, 'missing profile contract file fails';
-  like $missing->{stderr}, qr/profile contract file .*: No such file or directory/,
+  like $missing->{stderr}, qr/profile\ contract\ file\ .*:\ No\ such\ file\ or\ directory/mx,
     'missing file failure is explicit';
 
   my $invalid_json_path = File::Spec->catfile($tempdir, 'invalid-json.json');
@@ -42,7 +42,7 @@ subtest 'relay validates profile contract CLI inputs before listening' => sub {
     '--profile-contract', $invalid_json_path,
   );
   isnt $invalid_json->{exit}, 0, 'invalid profile contract JSON fails';
-  like $invalid_json->{stderr}, qr/invalid profile contract JSON/,
+  like $invalid_json->{stderr}, qr/invalid\ profile\ contract\ JSON/mx,
     'invalid JSON failure is explicit';
 
   my $not_object_path = File::Spec->catfile($tempdir, 'array.json');
@@ -54,7 +54,7 @@ subtest 'relay validates profile contract CLI inputs before listening' => sub {
     '--profile-contract', $not_object_path,
   );
   isnt $not_object->{exit}, 0, 'non-object profile contract fails';
-  like $not_object->{stderr}, qr/profile contract file .* must contain a JSON object/,
+  like $not_object->{stderr}, qr/profile\ contract\ file\ .*\ must\ contain\ a\ JSON\ object/mx,
     'non-object failure is explicit';
 
   my $invalid_contract_path = File::Spec->catfile($tempdir, 'invalid-contract.json');
@@ -67,7 +67,7 @@ subtest 'relay validates profile contract CLI inputs before listening' => sub {
     '--profile-contract', $invalid_contract_path,
   );
   isnt $invalid_contract->{exit}, 0, 'structurally invalid contract fails';
-  like $invalid_contract->{stderr}, qr/invalid profile_contracts: profile_contract\./,
+  like $invalid_contract->{stderr}, qr/invalid\ profile_contracts:\ profile_contract\./mx,
     'contract validation failure is explicit';
 
   my $invalid_policy = _run(
@@ -77,7 +77,7 @@ subtest 'relay validates profile contract CLI inputs before listening' => sub {
     '--profile-contract-policy', 'strict',
   );
   isnt $invalid_policy->{exit}, 0, 'invalid profile contract policy fails';
-  like $invalid_policy->{stderr}, qr/profile_contract_policy must be off, known, or required/,
+  like $invalid_policy->{stderr}, qr/profile_contract_policy\ must\ be\ off,\ known,\ or\ required/mx,
     'invalid policy failure is explicit';
 };
 
@@ -91,6 +91,7 @@ sub _write_file {
     or die "Can't write $path: $!";
   close $fh
     or die "Can't close $path: $!";
+  return;
 }
 
 sub _run {
@@ -98,8 +99,8 @@ sub _run {
   my $stderr = gensym;
   my $pid = open3(my $stdin, my $stdout, $stderr, @cmd);
   close $stdin;
-  my $stdout_text = do { local $/; <$stdout> // '' };
-  my $stderr_text = do { local $/; <$stderr> // '' };
+  my $stdout_text = do { local $/ = undef; <$stdout> // '' };
+  my $stderr_text = do { local $/ = undef; <$stderr> // '' };
   waitpid $pid, 0;
   return {
     exit => $? >> 8,

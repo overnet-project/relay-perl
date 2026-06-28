@@ -42,7 +42,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
   ok($read, 'tagged outbound payload is readable');
   like(
     $buffer,
-    qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z :irc\.example\.test 001 alice :Welcome to Overnet IRC\r\n\z/,
+    qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z\ :irc\.example\.test\ 001\ alice\ :Welcome\ to\ Overnet\ IRC\r\n\z/mx,
     'server-time tag is prepended to outbound IRC lines',
   );
 }
@@ -145,7 +145,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
   ok($read, 'WHOIS reply payload is readable');
   like(
     $buffer,
-    qr/\Q:irc.example.test 330 alice bob \E[b]{64}\Q :is logged in as\E/,
+    qr/\Q:irc.example.test 330 alice bob \E[b]{64}\Q :is logged in as\E/mx,
     'WHOIS reply includes the authenticated account identity',
   );
 }

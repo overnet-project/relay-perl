@@ -72,6 +72,7 @@ sub _stop_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_health {
@@ -82,7 +83,7 @@ sub _wait_for_health {
     if (-f $path && -s $path) {
       open my $fh, '<', $path
         or die "Can't open $path: $!";
-      local $/;
+      local $/ = undef;
       my $raw = <$fh>;
       close $fh;
       my $decoded = eval { JSON::decode_json($raw) };
@@ -116,14 +117,14 @@ sub _read_client_line {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $ready = IO::Select->new($client->{socket})->can_read($timeout_ms / 1000);
     unless ($ready) {
       my $extra = '';
       if (defined $CURRENT_IRC_LOG && length($CURRENT_IRC_LOG) && -f $CURRENT_IRC_LOG) {
         open my $fh, '<', $CURRENT_IRC_LOG
           or die "Can't open IRC log $CURRENT_IRC_LOG: $!";
-        local $/;
+        local $/ = undef;
         my $log = <$fh>;
         close $fh;
         $extra = "\nIRC log:\n$log";
@@ -131,7 +132,7 @@ sub _read_client_line {
       if (defined $CURRENT_IRC_HEALTH && length($CURRENT_IRC_HEALTH) && -f $CURRENT_IRC_HEALTH) {
         open my $fh, '<', $CURRENT_IRC_HEALTH
           or die "Can't open IRC health $CURRENT_IRC_HEALTH: $!";
-        local $/;
+        local $/ = undef;
         my $health = <$fh>;
         close $fh;
         $extra .= "\nIRC health:\n$health";
@@ -153,9 +154,9 @@ sub _read_client_line {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
@@ -170,6 +171,7 @@ sub _write_client_line {
       unless defined $written;
     $offset += $written;
   }
+  return;
 }
 
 sub _assert_registration_prelude {
@@ -184,6 +186,7 @@ sub _assert_registration_prelude {
     sprintf(':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server', $args{server_name}, $args{nick}, $args{network}),
     sprintf(':%s 422 %s :MOTD File is missing', $args{server_name}, $args{nick}),
   ], "$args{nick} receives the minimal registration prelude";
+  return;
 }
 
 sub _authoritative_auth_scope {
@@ -259,8 +262,8 @@ sub _run_relay_backup {
     '--backup-file', $args{backup_file},
   );
 
-  my $stdout_text = do { local $/; <$stdout> };
-  my $stderr_text = do { local $/; <$stderr> };
+  my $stdout_text = do { local $/ = undef; <$stdout> };
+  my $stderr_text = do { local $/ = undef; <$stderr> };
   close $stdout;
   close $stderr;
   waitpid($pid, 0);
@@ -480,9 +483,9 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
 
     _write_client_line($alice, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($alice, 3_000);
-    like $challenge_line, qr/\A:\Q$server_name\E NOTICE alice :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       'fresh IRC service exposes an authoritative auth challenge after restore';
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
 
     _write_client_line($alice, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
@@ -500,9 +503,9 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     _write_client_line($alice, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($alice, 3_000);
     like $delegate_line,
-      qr/\A:\Q$server_name\E NOTICE alice :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       'fresh IRC service exposes relay-backed delegation parameters after restore';
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
 
     _write_client_line($alice, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $alice_key,

@@ -43,7 +43,7 @@ subtest 'publishes a valid Overnet event' => sub {
   ok $ok, 'received publish result';
   is $ok->event_id, $valid_event->id, 'publish result references event id';
   ok $ok->accepted, 'event accepted';
-  like $ok->message, qr/\Aaccepted:/, 'accept result uses accepted prefix';
+  like $ok->message, qr/\Aaccepted:/mx, 'accept result uses accepted prefix';
   is $relay->store->get_by_id($valid_event->id)->id, $valid_event->id,
     'event stored in relay store';
 };
@@ -71,7 +71,7 @@ subtest 'rejects events missing mirror tags' => sub {
   my $ok = _last_message_of_type($conn, 'OK');
   ok $ok, 'received rejection result';
   ok !$ok->accepted, 'event rejected';
-  like $ok->message, qr/\Ainvalid:\s+Missing required v tag/,
+  like $ok->message, qr/\Ainvalid:\s+Missing\ required\ v\ tag/mx,
     'rejects missing mirror tags';
   ok !$relay->store->get_by_id($invalid_missing_mirror->id),
     'invalid event not stored';
@@ -119,7 +119,7 @@ subtest 'object-read endpoint returns current state view' => sub {
     '/.well-known/overnet/v1/object?type=chat.channel&id=irc%3Alocal%3A%23overnet',
   );
 
-  like $response, qr/\AHTTP\/1\.[01] 200 /, 'returns HTTP 200';
+  like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'returns HTTP 200';
   my $body = _decode_http_json_body($response);
   is $body->{object_type}, 'chat.channel', 'object type matches';
   is $body->{object_id}, 'irc:local:#overnet', 'object id matches';
@@ -222,17 +222,17 @@ sub _last_message_of_type {
     my $msg = Net::Nostr::Message->parse($raw);
     return $msg if $msg->type eq $type;
   }
-  return undef;
+  return;
 }
 
 sub _decode_http_json_body {
   my ($response) = @_;
-  my (undef, $body) = split /\r\n\r\n/, $response, 2;
+  my (undef, $body) = split /\r\n\r\n/mx, $response, 2;
   return $JSON->decode($body);
 }
 
 {
-  package _TestConn;
+  package _TestConn; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   sub new {
     return bless { sent_messages => [] }, shift;

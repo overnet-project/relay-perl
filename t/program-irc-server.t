@@ -27,7 +27,7 @@ use Overnet::Program::Runtime;
 
 my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
 my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
-my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', 'spec', 'fixtures', 'irc');
+my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', '..', 'spec', 'fixtures', 'irc');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 my $program_irc_server_group = $ENV{OVERNET_IRC_SERVER_GROUP} || 'base';
 
@@ -46,7 +46,7 @@ sub _load_irc_fixture {
   my ($name) = @_;
   my $path = File::Spec->catfile($spec_irc_dir, $name);
   open my $fh, '<', $path or die "Can't read $path: $!";
-  my $json = do { local $/; <$fh> };
+  my $json = do { local $/ = undef; <$fh> };
   close $fh;
   return JSON::decode_json($json);
 }
@@ -112,7 +112,7 @@ sub _wait_for_ready_details {
       return 0;
     },
   );
-  return undef unless $ready;
+  return unless $ready;
 
   for my $notification (@{$host->observed_notifications}) {
     next unless ($notification->{method} || '') eq 'program.health';
@@ -121,7 +121,7 @@ sub _wait_for_ready_details {
     return $notification->{params}{details};
   }
 
-  return undef;
+  return;
 }
 
 sub _wait_for_dm_subscription_count {
@@ -134,7 +134,7 @@ sub _wait_for_dm_subscription_count {
         $_[0]->transcript,
         'from_program',
         'subscriptions.open',
-        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/) ? 1 : 0 },
+        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
       ) >= $count;
     },
   );
@@ -180,7 +180,7 @@ sub _read_client_line {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
     die "Timed out waiting for IRC client line at $caller_file line $caller_line\n"
@@ -192,9 +192,9 @@ sub _read_client_line {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
@@ -224,16 +224,17 @@ sub _assert_registration_prelude {
     sprintf(':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server', $server_name, $nick, $network),
     sprintf(':%s 422 %s :MOTD File is missing', $server_name, $nick),
   ], "$nick receives the minimal registration prelude";
+  return;
 }
 
 sub _read_client_line_optional {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
-    return undef unless @ready;
+    return unless @ready;
 
     my $bytes = sysread($client->{socket}, my $chunk, 4096);
     die "IRC client disconnected unexpectedly at $caller_file line $caller_line\n"
@@ -241,9 +242,9 @@ sub _read_client_line_optional {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
@@ -258,6 +259,7 @@ sub _write_client_line {
       unless defined $written;
     $offset += $written;
   }
+  return;
 }
 
 sub _first_tag_values {
@@ -275,8 +277,8 @@ sub _first_tag_values {
 
 sub _extract_trailing_text {
   my ($line) = @_;
-  return undef unless defined $line && !ref($line);
-  return undef unless $line =~ / :(.*)\z/;
+  return unless defined $line && !ref($line);
+  return unless $line =~ /\ :(.*)\z/mx;
   return $1;
 }
 
@@ -391,9 +393,9 @@ sub _read_authenticate_payload {
 
   while (1) {
     my $line = _read_client_line($client, $timeout_ms);
-    like $line, qr/\A(?::[^ ]+ )?AUTHENTICATE (.+)\z/,
+    like $line, qr/\A(?::[^ ]+\ )?AUTHENTICATE\ (.+)\z/mx,
       'server emits an AUTHENTICATE challenge line';
-    my ($chunk) = $line =~ /\A(?::[^ ]+ )?AUTHENTICATE (.+)\z/;
+    my ($chunk) = $line =~ /\A(?::[^ ]+\ )?AUTHENTICATE\ (.+)\z/mx;
     last if !defined($chunk) || $chunk eq '+';
     $payload .= $chunk;
     last if length($chunk) < 400;
@@ -460,6 +462,7 @@ sub _stop_authoritative_nip29_relay {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_authoritative_nip29_relay_ready {
@@ -535,7 +538,7 @@ sub _pump_hosts_until {
 
 sub _pump_hosts_until_client_lines {
   my (%args) = @_;
-  my $client = $args{client} || return undef;
+  my $client = $args{client} || return;
   my $count = $args{count} || 1;
   my @lines;
 
@@ -553,15 +556,15 @@ sub _pump_hosts_until_client_lines {
     },
   );
 
-  return undef unless $ok;
+  return unless $ok;
   return \@lines;
 }
 
 sub _decode_e2ee_transport_from_line {
   my ($line) = @_;
   my $body = _extract_trailing_text($line);
-  return undef unless defined $body;
-  return undef unless $body =~ /\A\+overnet-e2ee-v1\s+(.+)\z/;
+  return unless defined $body;
+  return unless $body =~ /\A\+overnet-e2ee-v1\s+(.+)\z/mx;
 
   my $decoded = decode_base64($1);
   return JSON::decode_json($decoded);
@@ -588,7 +591,7 @@ sub _find_emitted_item {
     return $item;
   }
 
-  return undef;
+  return;
 }
 
 sub _count_emitted_items {
@@ -623,8 +626,8 @@ sub _assert_signed_emitted_matches_fixture {
     ? $content_override
     : JSON::decode_json($expected->{content});
 
-  like $data->{id}, qr/\A[0-9a-f]{64}\z/, "$label has a signed event id";
-  like $data->{sig}, qr/\A[0-9a-f]{128}\z/, "$label has a Schnorr signature";
+  like $data->{id}, qr/\A[0-9a-f]{64}\z/mx, "$label has a signed event id";
+  like $data->{sig}, qr/\A[0-9a-f]{128}\z/mx, "$label has a Schnorr signature";
   is $data->{pubkey}, $key->pubkey_hex, "$label is signed by the configured key";
   is $data->{kind}, $expected->{kind}, "$label kind matches fixture";
   cmp_ok $data->{created_at}, '>=', $time_window->{min}, "$label created_at is not before send time";
@@ -635,6 +638,7 @@ sub _assert_signed_emitted_matches_fixture {
 
   my $event = Net::Nostr::Event->from_wire($data);
   ok eval { $event->validate; 1 }, "$label validates as a signed Nostr event";
+  return;
 }
 
 sub _assert_private_message_emitted_matches_fixture {
@@ -650,13 +654,13 @@ sub _assert_private_message_emitted_matches_fixture {
   is $data->{object_id}, $expected_object_id, "$label keeps the logical object id";
 
   is $data->{transport}{kind}, 1059, "$label uses a kind 1059 gift wrap transport";
-  like $data->{transport}{id}, qr/\A[0-9a-f]{64}\z/, "$label has a visible wrap id";
-  like $data->{transport}{sig}, qr/\A[0-9a-f]{128}\z/, "$label has a visible wrap signature";
+  like $data->{transport}{id}, qr/\A[0-9a-f]{64}\z/mx, "$label has a visible wrap id";
+  like $data->{transport}{sig}, qr/\A[0-9a-f]{128}\z/mx, "$label has a visible wrap signature";
   my $wrap = Net::Nostr::Event->from_wire($data->{transport});
   ok eval { $wrap->validate; 1 }, "$label validates as a signed gift wrap";
 
   is $data->{decrypted_rumor}{kind}, 14, "$label uses a kind 14 rumor";
-  like $data->{decrypted_rumor}{id}, qr/\A[0-9a-f]{64}\z/, "$label has a rumor id";
+  like $data->{decrypted_rumor}{id}, qr/\A[0-9a-f]{64}\z/mx, "$label has a rumor id";
   is_deeply $data->{decrypted_rumor}{content}, $expected_content,
     "$label decrypted rumor content matches the expected logical payload";
 
@@ -664,7 +668,8 @@ sub _assert_private_message_emitted_matches_fixture {
     ref($_) eq 'ARRAY' && @{$_} >= 2 && $_->[0] eq 'p'
   } @{$data->{decrypted_rumor}{tags} || []};
   is scalar @recipient_tags, 1, "$label rumor has exactly one recipient tag";
-  like $recipient_tags[0][1], qr/\A[0-9a-f]{64}\z/, "$label rumor recipient tag contains a hex pubkey";
+  like $recipient_tags[0][1], qr/\A[0-9a-f]{64}\z/mx, "$label rumor recipient tag contains a hex pubkey";
+  return;
 }
 
 sub _assert_opaque_private_message_metadata {
@@ -682,8 +687,8 @@ sub _assert_opaque_private_message_metadata {
 
   ok !exists($data->{decrypted_rumor}), "$label does not expose decrypted_rumor";
   is $data->{transport}{kind}, 1059, "$label uses a kind 1059 gift wrap transport";
-  like $data->{transport}{id}, qr/\A[0-9a-f]{64}\z/, "$label has a visible wrap id";
-  like $data->{transport}{sig}, qr/\A[0-9a-f]{128}\z/, "$label has a visible wrap signature";
+  like $data->{transport}{id}, qr/\A[0-9a-f]{64}\z/mx, "$label has a visible wrap id";
+  like $data->{transport}{sig}, qr/\A[0-9a-f]{128}\z/mx, "$label has a visible wrap signature";
   my $wrap = Net::Nostr::Event->from_wire($data->{transport});
   ok eval { $wrap->validate; 1 }, "$label validates as a signed gift wrap";
 
@@ -691,11 +696,12 @@ sub _assert_opaque_private_message_metadata {
     ref($_) eq 'ARRAY' && @{$_} >= 2 && $_->[0] eq 'p'
   } @{$data->{transport}{tags} || []};
   is scalar @recipient_tags, 1, "$label visible transport has exactly one recipient tag";
-  like $recipient_tags[0][1], qr/\A[0-9a-f]{64}\z/, "$label visible recipient tag contains a hex pubkey";
+  like $recipient_tags[0][1], qr/\A[0-9a-f]{64}\z/mx, "$label visible recipient tag contains a hex pubkey";
+  return;
 }
 
 {
-  package Local::MockAuthoritativeIRCAdapter;
+  package Local::MockAuthoritativeIRCAdapter; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   use strict;
   use warnings;
@@ -763,7 +769,7 @@ sub _assert_opaque_private_message_metadata {
     my $state = $session->{channels}{$channel};
     if (($args{command} || '') eq 'MODE') {
       my $mode = $args{mode} || '';
-      if ($mode =~ /\A([+-])([ov])\z/) {
+      if ($mode =~ /\A([+-])([ov])\z/mx) {
         my ($direction, $mode_letter) = ($1, $2);
         my $target_pubkey = $args{target_pubkey};
         my %roles = map { $_ => 1 } @{$args{current_roles} || []};
@@ -780,7 +786,7 @@ sub _assert_opaque_private_message_metadata {
         return { valid => 1 };
       }
 
-      if ($mode =~ /\A([+-])([imt])\z/) {
+      if ($mode =~ /\A([+-])([imt])\z/mx) {
         my ($direction, $mode_letter) = ($1, $2);
         my $enabled = $direction eq '+' ? 1 : 0;
         $state->{closed} = $enabled if $mode_letter eq 'i';
@@ -1016,13 +1022,13 @@ sub _assert_opaque_private_message_metadata {
           : $roles{'irc.operator'} ? '' : 'not_operator',
       );
       if (!$state->{tombstoned} && $roles{'irc.operator'}) {
-        if ($mode =~ /\A[+-][ov]\z/ && defined($mode_args->[0])) {
+        if ($mode =~ /\A[+-][ov]\z/mx && defined($mode_args->[0])) {
           my $target_member = $state->{members}{$mode_args->[0]};
           $permission{target_pubkey} = $mode_args->[0];
           $permission{current_roles} = ref($target_member) eq 'HASH'
             ? [ sort @{$target_member->{roles} || []} ]
             : [];
-        } elsif ($mode =~ /\A[+-][b]\z/ && defined($mode_args->[0])) {
+        } elsif ($mode =~ /\A[+-][b]\z/mx && defined($mode_args->[0])) {
           $permission{normalized_ban_mask} = $mode_args->[0];
           $permission{group_metadata} = {
             closed           => $state->{closed} ? 1 : 0,
@@ -1032,7 +1038,7 @@ sub _assert_opaque_private_message_metadata {
             tombstoned       => 0,
             (exists($state->{topic}) ? (topic => $state->{topic}) : ()),
           };
-        } elsif ($mode =~ /\A[+-][imt]\z/) {
+        } elsif ($mode =~ /\A[+-][imt]\z/mx) {
           $permission{group_metadata} = {
             closed           => $state->{closed} ? 1 : 0,
             moderated        => $state->{moderated} ? 1 : 0,
@@ -1252,7 +1258,7 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
         $_[0]->transcript,
         'from_program',
         'subscriptions.close',
-        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/) ? 1 : 0 },
+        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
       ) >= 2;
     },
   ), 'bob quit completes its DM subscription close';
@@ -1260,7 +1266,7 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
     _read_client_line($bob, 500);
     '';
   };
-  like $@, qr/IRC client disconnected before sending a line/,
+  like $@, qr/IRC\ client\ disconnected\ before\ sending\ a\ line/mx,
     'server closes the client connection after QUIT';
 
   _write_client_line($dave, 'NICK bob');
@@ -1573,8 +1579,12 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
       );
     },
   ), 'case-folded channel PRIVMSG is emitted on the canonical channel object';
-  is _read_client_line($alice, 1_000), ':Alice PRIVMSG #OverNet :Casefolded hello',
-    'case-folded channel PRIVMSG renders back using the canonical channel spelling';
+  is scalar _pump_hosts_until_client_lines(
+    hosts      => [$host],
+    client     => $alice,
+    count      => 1,
+    timeout_ms => 200,
+  ), undef, 'case-folded channel PRIVMSG does not echo back to the sender';
 
   _write_client_line($alice, 'TOPIC #oVERnEt :Compatibility topic');
   ok $host->pump_until(
@@ -1751,8 +1761,12 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'alice channel message is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':alice PRIVMSG #overnet :Hello from IRC!',
-    'alice receives the subscription-driven PRIVMSG render';
+  is scalar _pump_hosts_until_client_lines(
+    hosts      => [$host],
+    client     => $alice,
+    count      => 1,
+    timeout_ms => 200,
+  ), undef, 'alice does not receive a subscription-driven echo for her own PRIVMSG';
   is _read_client_line_optional($bob, 200), undef,
     'bob does not receive channel renders before joining the channel';
 
@@ -1769,8 +1783,16 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       ) >= 2;
     },
   ), 'bob join is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':bob JOIN #overnet',
-    'joined clients receive later join lines';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $alice,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':bob JOIN #overnet'],
+    'joined clients receive later join lines',
+  );
   is_deeply [
     _read_client_lines($bob, 3, 1_000)
   ], [
@@ -1796,10 +1818,26 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'bob topic update is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':bob TOPIC #overnet :Overnet discussion and implementation',
-    'alice receives subscription-driven TOPIC fanout';
-  is _read_client_line($bob, 1_000), ':bob TOPIC #overnet :Overnet discussion and implementation',
-    'bob receives subscription-driven TOPIC fanout';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $alice,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':bob TOPIC #overnet :Overnet discussion and implementation'],
+    'alice receives subscription-driven TOPIC fanout',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $bob,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':bob TOPIC #overnet :Overnet discussion and implementation'],
+    'bob receives subscription-driven TOPIC fanout',
+  );
 
   my $carol = _connect_irc_client($ready_details->{listen_port});
   _write_client_line($carol, 'NICK carol');
@@ -1825,10 +1863,26 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       ) >= 3;
     },
   ), 'carol join is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':carol JOIN #overnet',
-    'existing joined clients receive carol join lines';
-  is _read_client_line($bob, 1_000), ':carol JOIN #overnet',
-    'all joined clients receive carol join lines';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $alice,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':carol JOIN #overnet'],
+    'existing joined clients receive carol join lines',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $bob,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':carol JOIN #overnet'],
+    'all joined clients receive carol join lines',
+  );
   is_deeply [
     _read_client_lines($carol, 4, 1_000)
   ], [
@@ -1855,12 +1909,36 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'alice nick change is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':alice NICK :alice_',
-    'alice receives her own NICK line';
-  is _read_client_line($bob, 1_000), ':alice NICK :alice_',
-    'bob receives alice nick change';
-  is _read_client_line($carol, 1_000), ':alice NICK :alice_',
-    'carol receives alice nick change';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $alice,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice NICK :alice_'],
+    'alice receives her own NICK line',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $bob,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice NICK :alice_'],
+    'bob receives alice nick change',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $carol,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice NICK :alice_'],
+    'carol receives alice nick change',
+  );
 
   _write_client_line($alice, 'PART #overnet :bye');
   ok $host->pump_until(
@@ -1875,12 +1953,36 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'alice part is emitted through the runtime';
-  is _read_client_line($alice, 1_000), ':alice_ PART #overnet :bye',
-    'alice receives her own PART line';
-  is _read_client_line($bob, 1_000), ':alice_ PART #overnet :bye',
-    'remaining channel members receive PART lines';
-  is _read_client_line($carol, 1_000), ':alice_ PART #overnet :bye',
-    'all remaining channel members receive PART lines';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $alice,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice_ PART #overnet :bye'],
+    'alice receives her own PART line',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $bob,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice_ PART #overnet :bye'],
+    'remaining channel members receive PART lines',
+  );
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $carol,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':alice_ PART #overnet :bye'],
+    'all remaining channel members receive PART lines',
+  );
 
   _write_client_line($bob, 'NOTICE #overnet :Only Bob now');
   ok $host->pump_until(
@@ -1895,10 +1997,22 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'bob notice is emitted through the runtime';
-  is _read_client_line($bob, 1_000), ':bob NOTICE #overnet :Only Bob now',
-    'bob receives subscription-driven NOTICE fanout';
-  is _read_client_line($carol, 1_000), ':bob NOTICE #overnet :Only Bob now',
-    'carol receives subscription-driven NOTICE fanout';
+  is scalar _pump_hosts_until_client_lines(
+    hosts      => [$host],
+    client     => $bob,
+    count      => 1,
+    timeout_ms => 200,
+  ), undef, 'bob does not receive a subscription-driven echo for his own NOTICE';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $carol,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':bob NOTICE #overnet :Only Bob now'],
+    'carol receives subscription-driven NOTICE fanout',
+  );
   is _read_client_line_optional($alice, 200), undef,
     'alice no longer receives renders after parting the channel';
 
@@ -1919,8 +2033,16 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       );
     },
   ), 'bob quit is emitted through the runtime';
-  is _read_client_line($carol, 1_000), ':bob QUIT :gone',
-    'remaining shared channel members receive QUIT lines';
+  is_deeply(
+    scalar _pump_hosts_until_client_lines(
+      hosts      => [$host],
+      client     => $carol,
+      count      => 1,
+      timeout_ms => 1_000,
+    ),
+    [':bob QUIT :gone'],
+    'remaining shared channel members receive QUIT lines',
+  );
   is _read_client_line_optional($alice, 200), undef,
     'parted clients do not receive later QUIT lines';
   ok $host->pump_until(
@@ -1930,7 +2052,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
         $_[0]->transcript,
         'from_program',
         'subscriptions.close',
-        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/) ? 1 : 0 },
+        sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
       ) >= 2;
     },
   ), 'bob quit completes its DM subscription close before later client input';
@@ -2069,13 +2191,13 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     $transcript,
     'from_program',
     'subscriptions.open',
-    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/) ? 1 : 0 },
+    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/mx) ? 1 : 0 },
   ), 1, 'program opens one shared channel subscription';
   is _request_count_matching(
     $transcript,
     'from_program',
     'subscriptions.close',
-    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/) ? 1 : 0 },
+    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/mx) ? 1 : 0 },
   ), 1, 'program closes one shared channel subscription when the channel becomes empty';
   ok _method_count($transcript, 'to_program', 'notification', 'runtime.subscription_event') >= 6,
     'runtime delivers subscription events back to the program';
@@ -2294,7 +2416,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
     $host->transcript,
     'from_program',
     'subscriptions.open',
-    sub { (($_[0]{subscription_id} || '') =~ /\Adm:/) ? 1 : 0 },
+    sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
   ), 2, 'program opens exactly two DM subscriptions for the two registered clients';
 
   close $alice->{socket};
@@ -2465,7 +2587,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
   $host->pump(timeout_ms => 100);
 
   my $received_line = _read_client_line($bob, 1_000);
-  like $received_line, qr/\A:alice PRIVMSG bob :\+overnet-e2ee-v1 /,
+  like $received_line, qr/\A:alice\ PRIVMSG\ bob\ :\+overnet-e2ee-v1\ /mx,
     'bob receives an opaque E2EE direct-message PRIVMSG body';
   is _read_client_line_optional($alice, 200), undef,
     'sender does not receive a synthetic E2EE DM echo';
@@ -2642,8 +2764,12 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
       );
     },
   ), 'TLS client channel message is emitted through the runtime';
-  is _read_client_line($client, 1_000), ':alice PRIVMSG #overnet :Hello from TLS!',
-    'TLS client receives subscription-driven PRIVMSG render';
+  is scalar _pump_hosts_until_client_lines(
+    hosts      => [$host],
+    client     => $client,
+    count      => 1,
+    timeout_ms => 200,
+  ), undef, 'TLS client does not receive a subscription-driven echo for its own PRIVMSG';
 
   my $message_item = _find_emitted_item(
     $runtime->emitted_items,
@@ -2653,7 +2779,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
     overnet_oid => $channel_object_id,
   );
   ok $message_item, 'runtime recorded the TLS client channel message';
-  like $message_item->{data}{id}, qr/\A[0-9a-f]{64}\z/, 'TLS message is signed as a Nostr event';
+  like $message_item->{data}{id}, qr/\A[0-9a-f]{64}\z/mx, 'TLS message is signed as a Nostr event';
   cmp_ok $message_item->{data}{created_at}, '>=', $time_window->{min}, 'TLS message created_at is recent';
   cmp_ok $message_item->{data}{created_at}, '<=', $time_window->{max}, 'TLS message created_at stays within the test window';
 
@@ -2661,7 +2787,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
     $host->transcript,
     'from_program',
     'subscriptions.open',
-    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/) ? 1 : 0 },
+    sub { (($_[0]{subscription_id} || '') =~ /\Achannel:/mx) ? 1 : 0 },
   ), 1, 'TLS server opens one shared channel subscription';
 
   my $shutdown = $host->request_shutdown(reason => 'tls test complete');
@@ -2699,7 +2825,7 @@ subtest 'IRC server program drops TLS handshakes on the plain listener without e
   ), 'runtime can register the real IRC adapter for the plain listener TLS probe';
 
   my $host = Overnet::Program::Host->new(
-    command     => ['/opt/perl-5.42/bin/perl', $program_path],
+    command     => [$^X, $program_path],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2916,9 +3042,9 @@ subtest 'IRC server program uses authoritative hosted-channel state for moderate
 
   _write_client_line($alice, 'OVERNETAUTH CHALLENGE');
   my $alice_challenge_line = _read_client_line($alice, 1_000);
-  like $alice_challenge_line, qr/\A:\Q$server_name\E NOTICE alice :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $alice_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'alice receives an authoritative auth challenge';
-  $alice_challenge_line =~ /([0-9a-f]{64})\z/;
+  $alice_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $alice_challenge = $1;
   _write_client_line($alice, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $alice_key,
@@ -2933,9 +3059,9 @@ subtest 'IRC server program uses authoritative hosted-channel state for moderate
 
   _write_client_line($bob, 'OVERNETAUTH CHALLENGE');
   my $bob_challenge_line = _read_client_line($bob, 1_000);
-  like $bob_challenge_line, qr/\A:\Q$server_name\E NOTICE bob :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $bob_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ bob\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'bob receives an authoritative auth challenge';
-  $bob_challenge_line =~ /([0-9a-f]{64})\z/;
+  $bob_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $bob_challenge = $1;
   _write_client_line($bob, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $bob_key,
@@ -3256,7 +3382,7 @@ subtest 'IRC server program authenticates authoritative clients through SASL NOS
 
   _write_client_line($alice, 'CAP LS 302');
   like _read_client_line($alice, 1_000),
-    qr/\A:\Q$server_name\E CAP \* LS :message-tags server-time overnet-e2ee account-tag account-notify sasl\z/,
+    qr/\A:\Q$server_name\E\ CAP\ \*\ LS\ :message-tags\ server-time\ overnet-e2ee\ account-tag\ account-notify\ sasl\z/mx,
     'authoritative SASL server advertises IRCv3 tag/time, account, and sasl capabilities';
 
   _write_client_line($alice, 'CAP REQ :sasl');
@@ -3285,7 +3411,7 @@ subtest 'IRC server program authenticates authoritative clients through SASL NOS
     },
     'non-relay authoritative SASL challenge exposes only the auth challenge and scope',
   );
-  like $challenge_payload->{challenge}, qr/\A[0-9a-f]{64}\z/,
+  like $challenge_payload->{challenge}, qr/\A[0-9a-f]{64}\z/mx,
     'non-relay authoritative SASL challenge carries a random challenge token';
 
   my $sasl_response_payload = encode_base64(
@@ -3507,9 +3633,9 @@ subtest 'IRC server program uses the real IRC adapter for authoritative NIP-29 c
 
   _write_client_line($alice, 'OVERNETAUTH CHALLENGE');
   my $alice_challenge_line = _read_client_line($alice, 1_000);
-  like $alice_challenge_line, qr/\A:\Q$server_name\E NOTICE alice :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $alice_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'alice receives a real authoritative auth challenge';
-  $alice_challenge_line =~ /([0-9a-f]{64})\z/;
+  $alice_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $alice_challenge = $1;
   _write_client_line($alice, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $alice_key,
@@ -3524,9 +3650,9 @@ subtest 'IRC server program uses the real IRC adapter for authoritative NIP-29 c
 
   _write_client_line($bob, 'OVERNETAUTH CHALLENGE');
   my $bob_challenge_line = _read_client_line($bob, 1_000);
-  like $bob_challenge_line, qr/\A:\Q$server_name\E NOTICE bob :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $bob_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ bob\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'bob receives a real authoritative auth challenge';
-  $bob_challenge_line =~ /([0-9a-f]{64})\z/;
+  $bob_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $bob_challenge = $1;
   _write_client_line($bob, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $bob_key,
@@ -3837,9 +3963,9 @@ subtest 'IRC server program rejects non-member JOIN on a closed authoritative ch
 
   _write_client_line($alice, 'OVERNETAUTH CHALLENGE');
   my $alice_challenge_line = _read_client_line($alice, 1_000);
-  like $alice_challenge_line, qr/\A:\Q$server_name\E NOTICE alice :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $alice_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'alice receives a closed authoritative auth challenge';
-  $alice_challenge_line =~ /([0-9a-f]{64})\z/;
+  $alice_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $alice_challenge = $1;
   _write_client_line($alice, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $alice_key,
@@ -3854,9 +3980,9 @@ subtest 'IRC server program rejects non-member JOIN on a closed authoritative ch
 
   _write_client_line($bob, 'OVERNETAUTH CHALLENGE');
   my $bob_challenge_line = _read_client_line($bob, 1_000);
-  like $bob_challenge_line, qr/\A:\Q$server_name\E NOTICE bob :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+  like $bob_challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ bob\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     'bob receives a closed authoritative auth challenge';
-  $bob_challenge_line =~ /([0-9a-f]{64})\z/;
+  $bob_challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $bob_challenge = $1;
   _write_client_line($bob, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
     key       => $bob_key,
@@ -4089,9 +4215,9 @@ subtest 'IRC server program admits an invited user to a closed authoritative cha
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$server_name\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$server_name\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -4185,7 +4311,7 @@ subtest 'IRC server program admits an invited user to a closed authoritative cha
   ok $invite_request, 'program routes authoritative INVITE through the adapter';
   is $invite_request->{input}{actor_pubkey}, $alice_pubkey, 'authoritative INVITE includes actor_pubkey';
   is $invite_request->{input}{target_pubkey}, $bob_pubkey, 'authoritative INVITE includes target_pubkey';
-  like $invite_request->{input}{invite_code}, qr/\A[0-9a-f]{64}\z/,
+  like $invite_request->{input}{invite_code}, qr/\A[0-9a-f]{64}\z/mx,
     'authoritative INVITE generates a deterministic invite code';
   ok _request_count_matching(
     $host->transcript,
@@ -4413,7 +4539,7 @@ subtest 'IRC server program establishes authoritative relay delegation through S
 
   _write_client_line($alice, 'CAP LS 302');
   like _read_client_line($alice, 1_000),
-    qr/\A:\Q$server_name\E CAP \* LS :message-tags server-time overnet-e2ee account-tag account-notify sasl\z/,
+    qr/\A:\Q$server_name\E\ CAP\ \*\ LS\ :message-tags\ server-time\ overnet-e2ee\ account-tag\ account-notify\ sasl\z/mx,
     'authoritative SASL relay server advertises IRCv3 tag/time, account, and sasl capabilities';
 
   _write_client_line($alice, 'CAP REQ :sasl');
@@ -4427,7 +4553,7 @@ subtest 'IRC server program establishes authoritative relay delegation through S
 
   _write_client_line($alice, 'AUTHENTICATE NOSTR');
   my $challenge_payload = _read_authenticate_payload($alice, 1_000);
-  like $challenge_payload->{challenge}, qr/\A[0-9a-f]{64}\z/,
+  like $challenge_payload->{challenge}, qr/\A[0-9a-f]{64}\z/mx,
     'relay-backed SASL challenge carries a random challenge token';
   is $challenge_payload->{scope}, _authoritative_auth_scope(
     server_name => $server_name,
@@ -4437,11 +4563,11 @@ subtest 'IRC server program establishes authoritative relay delegation through S
     'relay-backed SASL challenge carries the relay URL';
   is $challenge_payload->{grant_kind}, _authoritative_grant_kind(),
     'relay-backed SASL challenge carries the delegation grant kind';
-  like $challenge_payload->{delegate_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $challenge_payload->{delegate_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'relay-backed SASL challenge carries a delegated signing pubkey';
-  like $challenge_payload->{session_id}, qr/\A[0-9a-f]{64}\z/,
+  like $challenge_payload->{session_id}, qr/\A[0-9a-f]{64}\z/mx,
     'relay-backed SASL challenge carries a delegation session id';
-  like $challenge_payload->{expires_at}, qr/\A\d+\z/,
+  like $challenge_payload->{expires_at}, qr/\A\d+\z/mx,
     'relay-backed SASL challenge carries a delegation expiration';
 
   my $sasl_response_payload = encode_base64(
@@ -4575,11 +4701,11 @@ subtest 'IRC server program establishes authoritative relay delegation through S
     },
   );
   ok $topic_request, 'program routes SASL-authenticated relay-backed TOPIC through the adapter';
-  like $topic_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $topic_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'SASL-authenticated relay-backed TOPIC includes a delegated signing pubkey';
-  like $topic_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/,
+  like $topic_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/mx,
     'SASL-authenticated relay-backed TOPIC includes a delegation grant reference';
-  like $topic_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/,
+  like $topic_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/mx,
     'SASL-authenticated relay-backed TOPIC includes a session delegation sequence';
 
   my $shutdown = $host->request_shutdown(reason => 'authoritative sasl relay test complete');
@@ -4788,9 +4914,9 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge on $args{name}";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -4809,9 +4935,9 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($args{client}, 3_000);
     like $delegate_line,
-      qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       "$args{nick} receives session delegation parameters on $args{name}";
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $args{key},
       relay_url       => $relay_url,
@@ -4965,11 +5091,11 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     'instance A relay-backed TOPIC includes actor_pubkey';
   is $relay_topic_request->{input}{text}, 'Relay-backed topic',
     'instance A relay-backed TOPIC includes the new topic text';
-  like $relay_topic_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_topic_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'instance A relay-backed TOPIC includes a delegated signing pubkey';
-  like $relay_topic_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_topic_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/mx,
     'instance A relay-backed TOPIC includes a delegation grant reference';
-  like $relay_topic_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/,
+  like $relay_topic_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/mx,
     'instance A relay-backed TOPIC includes a session-scoped delegation sequence';
   ok(
     _pump_hosts_until(
@@ -4991,8 +5117,8 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
           my %tags = _first_tag_values($_->{tags});
           defined($tags{topic}) && $tags{topic} eq 'Relay-backed topic'
             && defined($tags{overnet_actor}) && $tags{overnet_actor} eq $alice_pubkey
-            && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/
-            && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/
+            && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx
+            && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx
         } @{$relay_topics}) ? 1 : 0;
       },
     ),
@@ -5040,11 +5166,11 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     'instance A relay-backed INVITE includes actor_pubkey';
   is $relay_invite_request->{input}{target_pubkey}, $bob_pubkey,
     'instance A relay-backed INVITE includes target_pubkey';
-  like $relay_invite_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_invite_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'instance A relay-backed INVITE includes a delegated signing pubkey';
-  like $relay_invite_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_invite_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/mx,
     'instance A relay-backed INVITE includes a delegation grant reference';
-  like $relay_invite_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/,
+  like $relay_invite_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/mx,
     'instance A relay-backed INVITE includes a session-scoped delegation sequence';
   ok(
     _pump_hosts_until(
@@ -5110,11 +5236,11 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     );
   }
   ok $relay_join_request, 'instance B routes the relay-backed JOIN through the adapter when invite admission is available';
-  like $relay_join_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_join_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'instance B relay-backed JOIN includes a delegated signing pubkey';
-  like $relay_join_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_join_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/mx,
     'instance B relay-backed JOIN includes a delegation grant reference';
-  like $relay_join_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/,
+  like $relay_join_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/mx,
     'instance B relay-backed JOIN includes a session-scoped delegation sequence';
   ok(
     _pump_hosts_until(
@@ -5176,7 +5302,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
             ),
       );
   like _read_client_line($bob_b, 3_000),
-    qr/\A:(?:alice|\Q$server_name_b\E) TOPIC \Q$channel\E :Relay-backed topic\z/,
+    qr/\A:(?:alice|\Q$server_name_b\E)\ TOPIC\ \Q$channel\E\ :Relay-backed\ topic\z/mx,
     'instance B join bootstrap replays the propagated authoritative topic';
   is _read_client_line($bob_b, 3_000), ":$server_name_b 353 bob = $channel :\@alice bob",
     'instance B NAMES bootstrap reflects authoritative remote presence after the relay-backed join';
@@ -5203,11 +5329,11 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     },
   );
   ok $relay_part_request, 'instance B routes the relay-backed PART through the adapter';
-  like $relay_part_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_part_request->{input}{signing_pubkey}, qr/\A[0-9a-f]{64}\z/mx,
     'instance B relay-backed PART includes a delegated signing pubkey';
-  like $relay_part_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/,
+  like $relay_part_request->{input}{authority_event_id}, qr/\A[0-9a-f]{64}\z/mx,
     'instance B relay-backed PART includes a delegation grant reference';
-  like $relay_part_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/,
+  like $relay_part_request->{input}{authority_sequence}, qr/\A[1-9]\d*\z/mx,
     'instance B relay-backed PART includes a session-scoped delegation sequence';
   is _read_client_line($bob_b, 3_000), ":bob PART $channel :later",
     'bob receives his relay-backed PART echo on instance B';
@@ -5225,8 +5351,8 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     scalar(grep {
       my %tags = _first_tag_values($_->{tags});
       defined($tags{overnet_actor}) && $tags{overnet_actor} eq $bob_pubkey
-        && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/
-        && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/
+        && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx
+        && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx
     } @{$relay_parts}),
     'the relay exposes the delegated authoritative PART event',
   );
@@ -5252,8 +5378,22 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
   _write_client_line($bob_b, "JOIN $channel");
   ok $host_b->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance B pumps bob post-PART rejoin attempt';
-  is _read_client_line($bob_b, 3_000), ":$server_name_b 473 bob $channel :Cannot join channel (+i)",
-    'instance B requires a fresh invite after relay-backed PART on a closed channel';
+  my @bob_b_post_part_rejoin_lines;
+  ok _pump_hosts_until(
+    hosts           => [$host_b],
+    pump_timeout_ms => $relay_host_pump_ms,
+    timeout_ms      => $relay_propagation_timeout_ms,
+    condition       => sub {
+      my $line = _read_client_line_optional($bob_b, 50);
+      return 0 unless defined $line;
+      push @bob_b_post_part_rejoin_lines, $line;
+      return $line eq ":$server_name_b 473 bob $channel :Cannot join channel (+i)" ? 1 : 0;
+    },
+  ), 'instance B requires a fresh invite after relay-backed PART on a closed channel'
+    or diag(
+      'instance B post-PART rejoin lines: '
+        . (@bob_b_post_part_rejoin_lines ? join(' | ', @bob_b_post_part_rejoin_lines) : '(none)'),
+    );
 
   my $relay_invites_before_reinvite = _query_nostr_events_from_relay(
     relay_url => $relay_url,
@@ -5488,7 +5628,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
   ok !defined($fresh_local_invite_numeric) || $fresh_local_invite_numeric eq ":$server_name_a 341 alice bob $channel",
     'instance A either emits or suppresses the fresh local INVITE confirmation numeric consistently';
   like _read_client_line($bob_b, 3_000),
-    qr/\A:(?:alice|\Q$server_name_b\E) TOPIC \Q$channel\E :Relay-backed topic\z/,
+    qr/\A:(?:alice|\Q$server_name_b\E)\ TOPIC\ \Q$channel\E\ :Relay-backed\ topic\z/mx,
     'instance B join bootstrap replays the propagated authoritative topic after the fresh invite';
   is _read_client_line($bob_b, 3_000), ":$server_name_b 353 bob = $channel :\@alice bob",
     'instance B NAMES bootstrap restores bob and retained remote presence after the fresh relay-backed INVITE';
@@ -5602,8 +5742,8 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
       my %tags = _first_tag_values($_->{tags});
       defined($tags{p}) && $tags{p} eq $bob_pubkey
         && defined($tags{overnet_actor}) && $tags{overnet_actor} eq $alice_pubkey
-        && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/
-        && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/
+        && defined($tags{overnet_authority}) && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx
+        && defined($tags{overnet_sequence}) && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx
     } @{$relay_kicks}),
     'the relay exposes the delegated authoritative KICK event',
   );
@@ -5614,7 +5754,7 @@ subtest 'IRC server program relay-publishes authoritative NIP-29 writes across t
     timeout_ms => $relay_propagation_timeout_ms,
     condition  => sub {
       my $line = _read_client_line_optional($bob_b, 50);
-      return defined($line) && $line =~ /\A:[^ ]+ KICK \Q$channel\E bob(?: :relay kick)?\z/ ? 1 : 0;
+      return defined($line) && $line =~ /\A:[^ ]+\ KICK\ \Q$channel\E\ bob(?:\ :relay\ kick)?\z/mx ? 1 : 0;
     },
   ), 'instance B bob receives the propagated relay-backed KICK';
 
@@ -5859,9 +5999,9 @@ subtest 'IRC server program creates and discovers authoritative hosted channels 
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge on $args{name}";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -5881,9 +6021,9 @@ subtest 'IRC server program creates and discovers authoritative hosted channels 
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($args{client}, 3_000);
     like $delegate_line,
-      qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       "$args{nick} receives session delegation parameters on $args{name}";
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $args{key},
       relay_url       => $relay_url,
@@ -6039,7 +6179,7 @@ subtest 'IRC server program creates and discovers authoritative hosted channels 
   is $discovered_list_lines->[0], ":$server_name_b 321 bob Channel :Users Name",
     'instance B LIST starts normally for discovered hosted channels';
   like $discovered_list_lines->[1],
-    qr/\A:\Q$server_name_b\E 322 bob \Q$channel\E 1 :\z/,
+    qr/\A:\Q$server_name_b\E\ 322\ bob\ \Q$channel\E\ 1\ :\z/mx,
     'instance B LIST discovers the created hosted channel before bob joins';
   is $discovered_list_lines->[2], ":$server_name_b 323 bob :End of /LIST",
     'instance B LIST ends normally for discovered hosted channels';
@@ -6224,7 +6364,7 @@ subtest 'IRC server program creates and discovers authoritative hosted channels 
   is $empty_list_lines->[0], ":$server_name_b 321 bob Channel :Users Name",
     'instance B LIST still starts after the created hosted channel empties';
   like $empty_list_lines->[1],
-    qr/\A:\Q$server_name_b\E 322 bob \Q$channel\E 0 :\z/,
+    qr/\A:\Q$server_name_b\E\ 322\ bob\ \Q$channel\E\ 0\ :\z/mx,
     'instance B LIST still exposes the empty created hosted channel';
   is $empty_list_lines->[2], ":$server_name_b 323 bob :End of /LIST",
     'instance B LIST still ends after the created hosted channel empties';
@@ -6383,9 +6523,9 @@ subtest 'IRC server program tombstones authoritative hosted channels across two 
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge on $args{name}";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -6405,9 +6545,9 @@ subtest 'IRC server program tombstones authoritative hosted channels across two 
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($args{client}, 3_000);
     like $delegate_line,
-      qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       "$args{nick} receives session delegation parameters on $args{name}";
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $args{key},
       relay_url       => $relay_url,
@@ -6493,7 +6633,7 @@ subtest 'IRC server program tombstones authoritative hosted channels across two 
   ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance A pumps authoritative hosted-channel creation before tombstoning';
   is_deeply(
-    _pump_hosts_until_client_lines(
+    scalar _pump_hosts_until_client_lines(
       hosts           => [$host_a],
       client          => $alice_a,
       count           => 3,
@@ -6531,7 +6671,7 @@ subtest 'IRC server program tombstones authoritative hosted channels across two 
   ok $host_b->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance B pumps authoritative JOIN before tombstoning';
   is_deeply(
-    _pump_hosts_until_client_lines(
+    scalar _pump_hosts_until_client_lines(
       hosts           => [$host_b],
       client          => $bob_b,
       count           => 3,
@@ -6809,9 +6949,9 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge on $args{name}";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -6831,9 +6971,9 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($args{client}, 3_000);
     like $delegate_line,
-      qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       "$args{nick} receives session delegation parameters on $args{name}";
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $args{key},
       relay_url       => $relay_url,
@@ -6919,7 +7059,7 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
   ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance A pumps authoritative hosted-channel creation before undelete';
   is_deeply(
-    _pump_hosts_until_client_lines(
+    scalar _pump_hosts_until_client_lines(
       hosts           => [$host_a],
       client          => $alice_a,
       count           => 3,
@@ -6938,7 +7078,7 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
   ok $host_b->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance B pumps authoritative JOIN before undelete';
   is_deeply(
-    _pump_hosts_until_client_lines(
+    scalar _pump_hosts_until_client_lines(
       hosts           => [$host_b],
       client          => $bob_b,
       count           => 3,
@@ -7136,7 +7276,7 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
   is $undeleted_list_lines->[0], ":$server_name_b 321 bob Channel :Users Name",
     'instance B LIST starts normally after UNDELETE';
   like $undeleted_list_lines->[1],
-    qr/\A:\Q$server_name_b\E 322 bob \Q$channel\E 0 :\Q$topic_text\E\z/,
+    qr/\A:\Q$server_name_b\E\ 322\ bob\ \Q$channel\E\ 0\ :\Q$topic_text\E\z/mx,
     'instance B LIST rediscoveries the undeleted hosted channel with zero users and retained topic metadata';
   is $undeleted_list_lines->[2], ":$server_name_b 323 bob :End of /LIST",
     'instance B LIST ends normally after UNDELETE';
@@ -7164,7 +7304,7 @@ subtest 'IRC server program reactivates tombstoned authoritative hosted channels
   ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
     'instance A pumps authoritative NAMES after the retained member rejoins';
   is_deeply(
-    _pump_hosts_until_client_lines(
+    scalar _pump_hosts_until_client_lines(
       hosts           => [ $host_a, $host_b ],
       client          => $alice_a,
       count           => 2,
@@ -7386,9 +7526,9 @@ subtest 'IRC server program enforces authoritative bans across two instances' =>
     my (%args) = @_;
     _write_client_line($args{client}, 'OVERNETAUTH CHALLENGE');
     my $challenge_line = _read_client_line($args{client}, 1_000);
-    like $challenge_line, qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    like $challenge_line, qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
       "$args{nick} receives an authoritative auth challenge on $args{name}";
-    $challenge_line =~ /([0-9a-f]{64})\z/;
+    $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
     _write_client_line($args{client}, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
       key       => $args{key},
@@ -7408,9 +7548,9 @@ subtest 'IRC server program enforces authoritative bans across two instances' =>
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($args{client}, 3_000);
     like $delegate_line,
-      qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/,
+      qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       "$args{nick} receives session delegation parameters on $args{name}";
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$relay_url\E (\d+)\z/;
+    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
     _write_client_line($args{client}, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
       key             => $args{key},
       relay_url       => $relay_url,
@@ -7737,12 +7877,12 @@ subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
   for my $path (@paths) {
     open my $fh, '<', $path
       or die "Unable to read $path: $!";
-    my $source = do { local $/; <$fh> };
+    my $source = do { local $/ = undef; <$fh> };
     close $fh;
 
-    unlike $source, qr/^\s*use\s+Net::Nostr/m,
+    unlike $source, qr{(?:\A|\n)\s*use\s+Net::Nostr}xm,
       "$path no longer imports Net::Nostr directly";
-    unlike $source, qr/\bNet::Nostr::/,
+    unlike $source, qr/\bNet::Nostr::/mx,
       "$path no longer references Net::Nostr directly";
   }
 };
@@ -7762,16 +7902,16 @@ subtest 'IRC server source keeps relay I/O and raw authoritative interpretation 
 
   open my $fh, '<', $server_path
     or die "Unable to read $server_path: $!";
-  my $source = do { local $/; <$fh> };
+  my $source = do { local $/ = undef; <$fh> };
   close $fh;
 
-  unlike $source, qr/Overnet::Core::Nostr->query_events/,
+  unlike $source, qr/Overnet::Core::Nostr->query_events/mx,
     'Server.pm does not query relays directly through Overnet::Core::Nostr';
-  unlike $source, qr/Overnet::Core::Nostr->publish_event/,
+  unlike $source, qr/Overnet::Core::Nostr->publish_event/mx,
     'Server.pm does not publish relay events directly through Overnet::Core::Nostr';
-  unlike $source, qr/\b_authoritative_pending_invite_for_pubkey\b/,
+  unlike $source, qr/\b_authoritative_pending_invite_for_pubkey\b/mx,
     'Server.pm does not keep a raw pending-invite scanner';
-  unlike $source, qr/\b_authoritative_present_pubkeys_for_channel\b/,
+  unlike $source, qr/\b_authoritative_present_pubkeys_for_channel\b/mx,
     'Server.pm does not keep a raw present-member scanner';
 };
 

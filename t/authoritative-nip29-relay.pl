@@ -37,9 +37,9 @@ if ($help) {
 die "--host is required\n"
   unless defined $opt{host} && !ref($opt{host}) && length($opt{host});
 die "--port must be a non-negative integer\n"
-  unless defined $opt{port} && !ref($opt{port}) && $opt{port} =~ /\A\d+\z/;
+  unless defined $opt{port} && !ref($opt{port}) && $opt{port} =~ /\A\d+\z/mx;
 die "--grant-kind must be a positive integer\n"
-  unless defined $opt{grant_kind} && !ref($opt{grant_kind}) && $opt{grant_kind} =~ /\A[1-9]\d*\z/;
+  unless defined $opt{grant_kind} && !ref($opt{grant_kind}) && $opt{grant_kind} =~ /\A[1-9]\d*\z/mx;
 die "--store-file must be a non-empty string\n"
   if defined $opt{store_file} && (ref($opt{store_file}) || $opt{store_file} eq '');
 
@@ -93,11 +93,11 @@ sub _authorize_event {
 
   my $actor_pubkey = $tags{overnet_actor};
   return (0, 'unauthorized: missing overnet_actor tag')
-    unless defined $actor_pubkey && $actor_pubkey =~ /\A[0-9a-f]{64}\z/;
+    unless defined $actor_pubkey && $actor_pubkey =~ /\A[0-9a-f]{64}\z/mx;
 
   my $authority_id = $tags{overnet_authority};
   return (0, 'unauthorized: missing overnet_authority tag')
-    unless defined $authority_id && $authority_id =~ /\A[0-9a-f]{64}\z/;
+    unless defined $authority_id && $authority_id =~ /\A[0-9a-f]{64}\z/mx;
 
   return (0, 'unauthorized: authority signer must differ from the effective actor')
     if $event->pubkey eq $actor_pubkey;
@@ -215,7 +215,7 @@ sub _derive_group_state {
       for my $tag (@{$event->tags || []}) {
         next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
         my $pubkey = $tag->[1];
-        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/;
+        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
         $members{$pubkey} = {
           pubkey => $pubkey,
           roles  => [ @{$tag}[2 .. $#{$tag}] ],
@@ -228,7 +228,7 @@ sub _derive_group_state {
       for my $tag (@{$event->tags || []}) {
         next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
         my $pubkey = $tag->[1];
-        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/;
+        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
         $members{$pubkey} ||= {
           pubkey => $pubkey,
           roles  => [],
@@ -267,7 +267,7 @@ sub _derive_group_state {
     if ($kind == 9021) {
       my %tags = _first_tag_values($event->tags);
       my $joiner = $tags{overnet_actor};
-      next unless defined $joiner && $joiner =~ /\A[0-9a-f]{64}\z/;
+      next unless defined $joiner && $joiner =~ /\A[0-9a-f]{64}\z/mx;
 
       if (!$closed) {
         $members{$joiner} ||= {
@@ -295,7 +295,7 @@ sub _derive_group_state {
     if ($kind == 9022) {
       my %tags = _first_tag_values($event->tags);
       my $leaver = $tags{overnet_actor};
-      next unless defined $leaver && $leaver =~ /\A[0-9a-f]{64}\z/;
+      next unless defined $leaver && $leaver =~ /\A[0-9a-f]{64}\z/mx;
       delete $members{$leaver};
       next;
     }
@@ -315,7 +315,7 @@ sub _actor_membership_state {
   my $relay = $args{relay};
   my $group_id = $args{group_id};
   my $actor = $args{actor};
-  return 0 unless defined $actor && $actor =~ /\A[0-9a-f]{64}\z/;
+  return 0 unless defined $actor && $actor =~ /\A[0-9a-f]{64}\z/mx;
 
   my $closed = 0;
   my $member = 0;
@@ -443,8 +443,8 @@ sub _event_authority_for_sort {
   return $tags{overnet_authority}
     if defined $tags{overnet_authority}
       && !ref($tags{overnet_authority})
-      && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/;
-  return undef;
+      && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx;
+  return;
 }
 
 sub _event_sequence_for_sort {
@@ -453,8 +453,8 @@ sub _event_sequence_for_sort {
   return 0 + $tags{overnet_sequence}
     if defined $tags{overnet_sequence}
       && !ref($tags{overnet_sequence})
-      && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/;
-  return undef;
+      && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx;
+  return;
 }
 
 sub _event_sort_rank {
@@ -523,7 +523,7 @@ sub _target_and_roles_from_put_user {
   for my $tag (@{$tags || []}) {
     next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
     my $pubkey = $tag->[1];
-    next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/;
+    next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
     return ($pubkey, [ @{$tag}[2 .. $#{$tag}] ]);
   }
 
@@ -538,7 +538,7 @@ sub _target_pubkey_from_tags {
     return $tag->[1];
   }
 
-  return undef;
+  return;
 }
 
 sub _invite_from_tags {

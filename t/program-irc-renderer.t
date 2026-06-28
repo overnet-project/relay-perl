@@ -221,20 +221,20 @@ my $server_path = File::Spec->catfile(
 );
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
-my $server_source = do { local $/; <$server_fh> };
+my $server_source = do { local $/ = undef; <$server_fh> };
 close $server_fh;
 
-like $server_source, qr/use Overnet::Program::IRC::Renderer;/,
+like $server_source, qr/use\ Overnet::Program::IRC::Renderer;/mx,
   'Server.pm loads the dedicated IRC renderer module';
-unlike $server_source, qr/421 %s %s :Unknown command/,
+unlike $server_source, qr/421\ %s\ %s\ :Unknown\ command/mx,
   'Server.pm no longer formats unknown-command numerics directly';
-unlike $server_source, qr/001 %s :Welcome to Overnet IRC/,
+unlike $server_source, qr/001\ %s\ :Welcome\ to\ Overnet\ IRC/mx,
   'Server.pm no longer formats registration numerics directly';
-unlike $server_source, qr/321 %s Channel :Users Name/,
+unlike $server_source, qr/321\ %s\ Channel\ :Users\ Name/mx,
   'Server.pm no longer formats LIST numerics directly';
-unlike $server_source, qr/353 %s = %s :%s/,
+unlike $server_source, qr/353\ %s\ =\ %s\ :%s/mx,
   'Server.pm no longer formats NAMES numerics directly';
-unlike $server_source, qr/367 %s %s %s %s 0/,
+unlike $server_source, qr/367\ %s\ %s\ %s\ %s\ 0/mx,
   'Server.pm no longer formats ban-list numerics directly';
 
 done_testing;

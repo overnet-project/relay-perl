@@ -49,7 +49,7 @@ Do not let this relay implementation become the de facto spec.
 
 Follow TDD strictly. Add or update tests before implementing behavior changes, and run the smallest relevant test slice first.
 
-The default relay-backed release gate is:
+The default release gate for the IRC verification path is:
 
 ```bash
 perl bin/overnet-release-gate.pl

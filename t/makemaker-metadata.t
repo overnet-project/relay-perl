@@ -97,7 +97,7 @@ sub _capture_makefile_args {
   my $cwd = getcwd();
   my ($volume, $dirs) = File::Spec->splitpath($makefile_pl);
   my $repo_root = File::Spec->catpath($volume, $dirs, '');
-  $repo_root =~ s{/$}{};
+  $repo_root =~ s{/$}{}mx;
 
   {
     require ExtUtils::MakeMaker;

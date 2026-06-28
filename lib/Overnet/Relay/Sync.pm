@@ -36,7 +36,7 @@ sub new {
 
   $args{timeout_seconds} //= 5;
   croak "timeout_seconds must be a positive integer"
-    unless $args{timeout_seconds} =~ /\A\d+\z/ && $args{timeout_seconds} > 0;
+    unless $args{timeout_seconds} =~ /\A\d+\z/mx && $args{timeout_seconds} > 0;
 
   return bless \%args, $class;
 }

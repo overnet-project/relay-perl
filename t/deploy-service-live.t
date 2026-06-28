@@ -61,6 +61,7 @@ sub _stop_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_health {
@@ -71,7 +72,7 @@ sub _wait_for_health {
     if (-f $path && -s $path) {
       open my $fh, '<', $path
         or die "Can't open $path: $!";
-      local $/;
+      local $/ = undef;
       my $raw = <$fh>;
       close $fh;
       my $decoded = eval { JSON::decode_json($raw) };

@@ -14,7 +14,7 @@ my @scripts = (
 plan tests => scalar @scripts;
 
 for my $script (@scripts) {
-  my $path = File::Spec->catfile($FindBin::Bin, '..', split m{/}, $script);
+  my $path = File::Spec->catfile($FindBin::Bin, '..', split m{/}mx, $script);
   my $ok = system($^X, '-c', $path) == 0;
   ok $ok, "$script compiles";
 }

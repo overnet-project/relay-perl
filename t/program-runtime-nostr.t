@@ -80,6 +80,7 @@ sub _stop_authoritative_nip29_relay {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_authoritative_nip29_relay_ready {
@@ -215,7 +216,7 @@ subtest 'delegation helper validates authoritative auth events and delegation gr
     event     => $auth_event,
   );
   ok !$bad_auth->{valid}, 'helper rejects an auth event with the wrong challenge';
-  like $bad_auth->{reason}, qr/challenge/i, 'helper reports a challenge mismatch';
+  like $bad_auth->{reason}, qr/challenge/imx, 'helper reports a challenge mismatch';
 
   my $grant_event = $authority_key->create_event(
     kind       => 14142,
@@ -254,7 +255,7 @@ subtest 'delegation helper validates authoritative auth events and delegation gr
     event            => $grant_event,
   );
   ok !$bad_grant->{valid}, 'helper rejects a delegation grant for the wrong delegate pubkey';
-  like $bad_grant->{reason}, qr/delegate/i, 'helper reports the delegate mismatch';
+  like $bad_grant->{reason}, qr/delegate/imx, 'helper reports the delegate mismatch';
 };
 
 subtest 'nostr services publish events, seed snapshots, and queue relay-backed subscription updates' => sub {

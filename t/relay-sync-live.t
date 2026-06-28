@@ -85,6 +85,7 @@ sub _stop_relay_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_relay_ready {
@@ -110,9 +111,9 @@ sub _wait_for_relay_ready {
         '',
         '',
       ) or die "request failed: $!";
-      my $response = do { local $/; <$socket> };
+      my $response = do { local $/ = undef; <$socket> };
       close $socket;
-      return defined $response && $response =~ /\AHTTP\/1\.[01] 200 / ? 1 : 0;
+      return defined $response && $response =~ /\AHTTP\/1\.[01]\ 200\ /mx ? 1 : 0;
     };
 
     return 1 if $ok;
@@ -136,14 +137,14 @@ sub _http_request {
   print {$socket} $args{request}
     or die "Can't write HTTP request to relay: $!";
 
-  my $response = do { local $/; <$socket> };
+  my $response = do { local $/ = undef; <$socket> };
   close $socket;
   return $response;
 }
 
 sub _decode_http_json_body {
   my ($response) = @_;
-  my (undef, $body) = split /\r\n\r\n/, $response, 2;
+  my (undef, $body) = split /\r\n\r\n/mx, $response, 2;
   return JSON::decode_json($body);
 }
 
@@ -289,7 +290,7 @@ subtest 'one-shot negentropy sync pulls a missing Overnet event into a second li
         '',
       ),
     );
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'relay B object endpoint returns HTTP 200 after sync';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'relay B object endpoint returns HTTP 200 after sync';
     my $body = _decode_http_json_body($response);
     is $body->{state_event}{id}, $event->id, 'relay B object endpoint exposes the synced state event';
   };

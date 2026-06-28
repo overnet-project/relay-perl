@@ -85,6 +85,7 @@ sub _stop_relay_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _http_request {
@@ -101,14 +102,14 @@ sub _http_request {
   print {$socket} $args{request}
     or die "Can't write HTTP request to relay: $!";
 
-  my $response = do { local $/; <$socket> };
+  my $response = do { local $/ = undef; <$socket> };
   close $socket;
   return $response;
 }
 
 sub _decode_http_json_body {
   my ($response) = @_;
-  my (undef, $body) = split /\r\n\r\n/, $response, 2;
+  my (undef, $body) = split /\r\n\r\n/mx, $response, 2;
   return JSON::decode_json($body);
 }
 
@@ -130,7 +131,7 @@ sub _wait_for_relay_ready {
           '',
         ),
       );
-      return defined $response && $response =~ /\AHTTP\/1\.[01] 200 / ? 1 : 0;
+      return defined $response && $response =~ /\AHTTP\/1\.[01]\ 200\ /mx ? 1 : 0;
     };
 
     return 1 if $ok;
@@ -257,8 +258,8 @@ subtest 'relay sync CLI loads static config and syncs one peer into the local re
       '--config', $config_path,
     );
     close $stdin;
-    my $sync_stdout = do { local $/; <$stdout> };
-    my $sync_stderr = do { local $/; <$stderr> };
+    my $sync_stdout = do { local $/ = undef; <$stdout> };
+    my $sync_stderr = do { local $/ = undef; <$stderr> };
     close $stdout;
     close $stderr;
     waitpid($pid, 0);
@@ -314,7 +315,7 @@ subtest 'relay sync CLI loads static config and syncs one peer into the local re
         '',
       ),
     );
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'relay B object endpoint returns HTTP 200 after CLI sync';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'relay B object endpoint returns HTTP 200 after CLI sync';
     my $body = _decode_http_json_body($response);
     is $body->{state_event}{id}, $event->id, 'relay B object endpoint exposes the CLI-synced state event';
   };

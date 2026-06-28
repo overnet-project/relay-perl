@@ -57,7 +57,7 @@ sub _load_from_disk {
 
   open my $fh, '<', $path
     or die "Can't open relay store file $path for reading: $!";
-  local $/;
+  local $/ = undef;
   my $raw = <$fh>;
   close $fh;
 

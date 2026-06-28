@@ -8,7 +8,7 @@ use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 require Overnet::Program::IRC::Server;
 
 {
-  package Local::AuthoritativeEmptyReadServer;
+  package Local::AuthoritativeEmptyReadServer; ## no critic (Modules::RequireFilenameMatchesPackage)
   our @ISA = ('Overnet::Program::IRC::Server');
 
   sub _read_authoritative_nip29_events {

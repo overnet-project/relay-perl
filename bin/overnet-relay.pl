@@ -83,7 +83,7 @@ if ($help) {
 
 die "--host is required\n" if !defined($host) || $host eq '';
 die "--port must be a non-negative integer\n"
-  if !defined($port) || $port !~ /\A\d+\z/;
+  if !defined($port) || $port !~ /\A\d+\z/mx;
 
 for my $int_opt (
   qw(
@@ -96,7 +96,7 @@ for my $int_opt (
   )
 ) {
   die "--$int_opt must be a positive integer\n"
-    if !defined($opt{$int_opt}) || $opt{$int_opt} !~ /\A\d+\z/ || $opt{$int_opt} < 1;
+    if !defined($opt{$int_opt}) || $opt{$int_opt} !~ /\A\d+\z/mx || $opt{$int_opt} < 1;
 }
 
 delete $opt{host};
@@ -196,7 +196,7 @@ sub _parse_service_policies {
 
   for my $entry (@entries) {
     die "--service-policy must be NAME=VALUE\n"
-      unless defined $entry && !ref($entry) && $entry =~ /\A([a-z_]+)=([a-z_]+)\z/;
+      unless defined $entry && !ref($entry) && $entry =~ /\A([a-z_]+)=([a-z_]+)\z/mx;
     $policies{$1} = $2;
   }
 
@@ -214,7 +214,7 @@ sub _load_profile_contracts {
 
     open my $fh, '<:raw', $path
       or die "Can't open profile contract file $path: $!\n";
-    my $content = do { local $/; <$fh> };
+    my $content = do { local $/ = undef; <$fh> };
     close $fh
       or die "Can't close profile contract file $path: $!\n";
 

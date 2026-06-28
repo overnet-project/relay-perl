@@ -24,7 +24,7 @@ can_ok(
 );
 
 {
-  package Local::MockAuthorityCoordinatorServer;
+  package Local::MockAuthorityCoordinatorServer; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   sub new {
     return bless {
@@ -153,32 +153,32 @@ my $server_path = File::Spec->catfile(
 );
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
-my $server_source = do { local $/; <$server_fh> };
+my $server_source = do { local $/ = undef; <$server_fh> };
 close $server_fh;
 
-like $server_source, qr/use Overnet::Program::IRC::Authority::Coordinator;/,
+like $server_source, qr/use\ Overnet::Program::IRC::Authority::Coordinator;/mx,
   'Server.pm loads the authority coordinator module';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_grant_subscription/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_grant_subscription/mx,
   'Server.pm delegates authoritative grant subscriptions to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_discovery_subscription/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_discovery_subscription/mx,
   'Server.pm delegates authoritative discovery subscriptions to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_channel_subscription/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::ensure_authoritative_channel_subscription/mx,
   'Server.pm delegates authoritative channel subscriptions to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::read_authoritative_nip29_events/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::read_authoritative_nip29_events/mx,
   'Server.pm delegates authoritative event reads to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::read_authoritative_grant_events/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::read_authoritative_grant_events/mx,
   'Server.pm delegates authoritative grant reads to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::publish_authoritative_nip29_event/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::publish_authoritative_nip29_event/mx,
   'Server.pm delegates authoritative relay publishes to the coordinator';
-like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::handle_subscription_event/,
+like $server_source, qr/Overnet::Program::IRC::Authority::Coordinator::handle_subscription_event/mx,
   'Server.pm delegates runtime subscription events to the coordinator';
-unlike $server_source, qr/method => 'nostr\.open_subscription'/,
+unlike $server_source, qr/method\ =>\ 'nostr\.open_subscription'/mx,
   'Server.pm no longer embeds raw nostr.open_subscription calls';
-unlike $server_source, qr/method => 'nostr\.read_subscription_snapshot'/,
+unlike $server_source, qr/method\ =>\ 'nostr\.read_subscription_snapshot'/mx,
   'Server.pm no longer embeds raw nostr.read_subscription_snapshot calls';
-unlike $server_source, qr/method => 'nostr\.query_events'/,
+unlike $server_source, qr/method\ =>\ 'nostr\.query_events'/mx,
   'Server.pm no longer embeds raw nostr.query_events calls';
-unlike $server_source, qr/method => 'nostr\.publish_event'/,
+unlike $server_source, qr/method\ =>\ 'nostr\.publish_event'/mx,
   'Server.pm no longer embeds raw nostr.publish_event calls';
 
 done_testing;

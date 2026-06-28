@@ -8,7 +8,7 @@ sub _slurp {
   my ($path) = @_;
   open my $fh, '<', $path
     or die "Can't open $path: $!";
-  local $/;
+  local $/ = undef;
   return <$fh>;
 }
 
@@ -51,41 +51,41 @@ ok -f $relay_b_env, 'canary relay B env example exists';
 ok -f $irc_env, 'canary IRC env example exists';
 
 my $sync_unit_text = _slurp($relay_sync_unit);
-like $sync_unit_text, qr/ExecStart=.*overnet-relay-sync\.pl/, 'relay-sync unit runs the sync CLI';
-like $sync_unit_text, qr/EnvironmentFile=.*overnet-relay-sync\.env/, 'relay-sync unit uses a sync env file';
+like $sync_unit_text, qr/ExecStart=.*overnet-relay-sync\.pl/mx, 'relay-sync unit runs the sync CLI';
+like $sync_unit_text, qr/EnvironmentFile=.*overnet-relay-sync\.env/mx, 'relay-sync unit uses a sync env file';
 
 my $sync_timer_text = _slurp($relay_sync_timer);
-like $sync_timer_text, qr/OnUnitActiveSec=/, 'relay-sync timer defines a recurring interval';
+like $sync_timer_text, qr/OnUnitActiveSec=/mx, 'relay-sync timer defines a recurring interval';
 
 my $authority_relay_unit_text = _slurp($authority_relay_unit);
-like $authority_relay_unit_text, qr/ExecStart=.*overnet-irc-authority-relay-service\.pl/, 'authoritative relay unit runs the authority relay service wrapper';
-like $authority_relay_unit_text, qr/EnvironmentFile=.*overnet-irc-authority-relay\.env/, 'authoritative relay unit uses an env file';
-like $authority_relay_unit_text, qr/--health-file/, 'authoritative relay unit configures a health file';
+like $authority_relay_unit_text, qr/ExecStart=.*overnet-irc-authority-relay-service\.pl/mx, 'authoritative relay unit runs the authority relay service wrapper';
+like $authority_relay_unit_text, qr/EnvironmentFile=.*overnet-irc-authority-relay\.env/mx, 'authoritative relay unit uses an env file';
+like $authority_relay_unit_text, qr/--health-file/mx, 'authoritative relay unit configures a health file';
 
 my $templated_irc_unit_text = _slurp($templated_irc_unit);
-like $templated_irc_unit_text, qr/ExecStart=.*overnet-irc-service\.pl/, 'templated IRC unit runs the IRC service wrapper';
-like $templated_irc_unit_text, qr/EnvironmentFile=.*overnet-irc\.env/, 'templated IRC unit uses an env file';
+like $templated_irc_unit_text, qr/ExecStart=.*overnet-irc-service\.pl/mx, 'templated IRC unit runs the IRC service wrapper';
+like $templated_irc_unit_text, qr/EnvironmentFile=.*overnet-irc\.env/mx, 'templated IRC unit uses an env file';
 
 for my $doc (
   [ 'code canary README', _slurp($code_canary_readme) ],
   [ 'IRC canary README',  _slurp($irc_canary_readme) ],
 ) {
   my ($label, $text) = @{$doc};
-  like $text, qr/two relays/i, "$label describes the two-relay topology";
-  like $text, qr/one IRC server/i, "$label describes the single IRC server topology";
-  like $text, qr/health/i, "$label documents health files or checks";
+  like $text, qr/two\ relays/imx, "$label describes the two-relay topology";
+  like $text, qr/one\ IRC\ server/imx, "$label describes the single IRC server topology";
+  like $text, qr/health/imx, "$label documents health files or checks";
 }
 
-like _slurp($code_canary_sync_a_config), qr/relay-sync-a-to-b|remote_url|local_url/s,
-  'sync A->B config example describes the local and remote relay endpoints';
-like _slurp($code_canary_sync_b_config), qr/relay-sync-b-to-a|remote_url|local_url/s,
-  'sync B->A config example describes the local and remote relay endpoints';
+like _slurp($code_canary_sync_a_config), qr/relay-sync-a-to-b|remote_url|local_url/smx,
+  'sync A->B config example describes the local and remote relay endpoints' ;
+like _slurp($code_canary_sync_b_config), qr/relay-sync-b-to-a|remote_url|local_url/smx,
+  'sync B->A config example describes the local and remote relay endpoints' ;
 
-like _slurp($relay_a_env), qr/OVERNET_IRC_AUTHORITY_RELAY_STORE_FILE=/,
+like _slurp($relay_a_env), qr/OVERNET_IRC_AUTHORITY_RELAY_STORE_FILE=/mx,
   'relay A env example exposes a persisted store path';
-like _slurp($relay_b_env), qr/OVERNET_IRC_AUTHORITY_RELAY_STORE_FILE=/,
+like _slurp($relay_b_env), qr/OVERNET_IRC_AUTHORITY_RELAY_STORE_FILE=/mx,
   'relay B env example exposes a persisted store path';
-like _slurp($irc_env), qr/OVERNET_IRC_AUTHORITY_RELAY_URL=/,
+like _slurp($irc_env), qr/OVERNET_IRC_AUTHORITY_RELAY_URL=/mx,
   'canary IRC env example points at an authority relay URL';
 
 done_testing;

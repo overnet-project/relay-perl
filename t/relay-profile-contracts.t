@@ -51,7 +51,7 @@ subtest 'configured contracts default to known policy and validate matching even
   );
   my $invalid_ok = _publish($relay, $invalid);
   ok !$invalid_ok->accepted, 'matching invalid profile event is rejected';
-  like $invalid_ok->message, qr/\Ainvalid:\s+profile_event\.body_schema_mismatch/,
+  like $invalid_ok->message, qr/\Ainvalid:\s+profile_event\.body_schema_mismatch/mx,
     'profile rejection uses invalid outcome reason';
 
   my $unknown = _create_overnet_event(
@@ -112,7 +112,7 @@ subtest 'required policy rejects profile events without a configured contract' =
 
   my $ok = _publish($relay, $unknown);
   ok !$ok->accepted, 'required policy rejects events without matching contract';
-  like $ok->message, qr/\Ainvalid:\s+profile_event\.event_type_undefined/,
+  like $ok->message, qr/\Ainvalid:\s+profile_event\.event_type_undefined/mx,
     'missing profile contract uses invalid reason';
 
   my $unknown_core = _create_overnet_event(
@@ -127,7 +127,7 @@ subtest 'required policy rejects profile events without a configured contract' =
   my $unknown_core_ok = _publish($relay, $unknown_core);
   ok !$unknown_core_ok->accepted,
     'required policy rejects unknown core-prefixed event types';
-  like $unknown_core_ok->message, qr/\Ainvalid:\s+profile_event\.event_type_undefined/,
+  like $unknown_core_ok->message, qr/\Ainvalid:\s+profile_event\.event_type_undefined/mx,
     'unknown core-prefixed events do not bypass required policy';
 
   my $delegation = _create_overnet_event(
@@ -160,7 +160,7 @@ subtest 'core validation runs before profile validation' => sub {
 
   my $ok = _publish($relay, $event);
   ok !$ok->accepted, 'event is rejected';
-  like $ok->message, qr/\Ainvalid:\s+Missing required body field in content/,
+  like $ok->message, qr/\Ainvalid:\s+Missing\ required\ body\ field\ in\ content/mx,
     'core validation reason wins before profile checks';
 };
 
@@ -171,7 +171,7 @@ subtest 'contracts are validated at relay construction time' => sub {
   my $relay = eval { _build_relay(profile_contracts => [$contract]) };
   my $error = $@;
   ok !$relay, 'relay construction fails';
-  like $error, qr/profile_contract\./,
+  like $error, qr/profile_contract\./mx,
     'invalid contract is rejected before publish';
 };
 
@@ -306,11 +306,11 @@ sub _last_message_of_type {
     my $msg = Net::Nostr::Message->parse($raw);
     return $msg if $msg->type eq $type;
   }
-  return undef;
+  return;
 }
 
 {
-  package _TestConn;
+  package _TestConn; ## no critic (Modules::RequireFilenameMatchesPackage)
 
   sub new {
     return bless { sent_messages => [] }, shift;

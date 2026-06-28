@@ -138,7 +138,7 @@ sub _handle_nip11_or_ws {
   my $dispatch = sub {
     my $peek = '';
     recv($fh, $peek, 8192, MSG_PEEK);
-    my ($method, $path) = $peek =~ /\A([A-Z]+)\s+(\S+)\s+HTTP\/1\.[01]\r\n/;
+    my ($method, $path) = $peek =~ /\A([A-Z]+)\s+(\S+)\s+HTTP\/1\.[01]\r\n/mx;
 
     if (defined $method && $method eq 'OPTIONS') {
       sysread($fh, my $discard, 8192);
@@ -149,7 +149,7 @@ sub _handle_nip11_or_ws {
     }
 
     if (defined $method && defined $path
-        && $path =~ m{\A/\.well-known/overnet/v1/object(?:\?|$)}) {
+        && $path =~ m{\A/\.well-known/overnet/v1/object(?:\?|$)}mx) {
       sysread($fh, my $discard, 8192);
       _write_all($fh, $self->_handle_object_http_request($method, $path));
       close $fh;
@@ -157,8 +157,8 @@ sub _handle_nip11_or_ws {
       return;
     }
 
-    if ($peek =~ /Accept:\s*application\/nostr\+json/i
-        && $peek !~ /Upgrade:\s*websocket/i) {
+    if ($peek =~ /Accept:\s*application\/nostr\+json/imx
+        && $peek !~ /Upgrade:\s*websocket/imx) {
       sysread($fh, my $discard, 8192);
       _write_all($fh, $self->relay_info->to_http_response);
       close $fh;
@@ -167,8 +167,8 @@ sub _handle_nip11_or_ws {
     }
 
     if (defined $method
-        && $peek !~ /Upgrade:\s*websocket/i
-        && $peek !~ /Accept:\s*application\/nostr\+json/i) {
+        && $peek !~ /Upgrade:\s*websocket/imx
+        && $peek !~ /Accept:\s*application\/nostr\+json/imx) {
       sysread($fh, my $discard, 8192);
       _write_all($fh, _http_json_response(
         status_line => 'HTTP/1.1 404 Not Found',
@@ -192,7 +192,7 @@ sub _handle_nip11_or_ws {
     recv($fh, $chunk, 8192, MSG_PEEK);
     $buf = $chunk;
 
-    if ($buf =~ /\r\n\r\n/ || length($buf) >= 8192) {
+    if ($buf =~ /\r\n\r\n/mx || length($buf) >= 8192) {
       $cleanup->();
       $dispatch->();
     }
@@ -204,6 +204,7 @@ sub _handle_nip11_or_ws {
   });
 
   $self->_nip11_watchers->{$fileno} = [$w, $timer];
+  return;
 }
 
 sub _handle_object_http_request {
@@ -221,7 +222,7 @@ sub _handle_object_http_request {
     );
   }
 
-  my (undef, $query_string) = split /\?/, $path, 2;
+  my (undef, $query_string) = split /\?/mx, $path, 2;
   my %query = _decode_query_string($query_string // '');
 
   my $object_type = $query{type};
@@ -305,6 +306,7 @@ sub _handle_event {
     accepted => $result->{accepted} ? 1 : 0,
     message => $result->{message},
   )->serialize);
+  return;
 }
 
 sub accept_synced_event {
@@ -519,6 +521,7 @@ sub _handle_req {
     type => 'EOSE',
     subscription_id => $sub_id,
   )->serialize);
+  return;
 }
 
 sub _handle_neg_open {
@@ -552,7 +555,7 @@ sub _handle_neg_open {
 
   my ($response, $have, $need) = eval { $ne->reconcile($msg->neg_msg) };
   if ($@) {
-    (my $reason = $@) =~ s/\n\z//;
+    (my $reason = $@) =~ s/\n\z//mx;
     $conn->send(Net::Nostr::Message->new(
       type => 'NEG-ERR',
       subscription_id => $sub_id,
@@ -576,6 +579,7 @@ sub _handle_neg_open {
     subscription_id => $sub_id,
     neg_msg => '61',
   )->serialize);
+  return;
 }
 
 sub _validate_overnet_publish {
@@ -594,7 +598,7 @@ sub _validate_overnet_publish {
   return 'invalid: ' . $profile_error
     if $profile_error;
 
-  return undef;
+  return;
 }
 
 sub _overnet_validation_context {
@@ -688,9 +692,9 @@ sub _decode_query_string {
   my %query;
   return %query unless length $query_string;
 
-  for my $pair (split /&/, $query_string) {
+  for my $pair (split /&/mx, $query_string) {
     next unless length $pair;
-    my ($key, $value) = split /=/, $pair, 2;
+    my ($key, $value) = split /=/mx, $pair, 2;
     next unless defined $key;
     $query{uri_unescape($key)} = defined $value ? uri_unescape($value) : '';
   }
@@ -728,7 +732,7 @@ sub _normalize_outcome_message {
   my ($message, $default_prefix, $default_detail) = @_;
   $default_detail //= '';
 
-  if (defined $message && !ref($message) && $message =~ /\A([a-z_]+):\s/s) {
+  if (defined $message && !ref($message) && $message =~ /\A([a-z_]+):\s/smx) {
     return $message if $VALID_OUTCOME_PREFIX{$1};
   }
 

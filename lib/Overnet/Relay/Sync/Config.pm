@@ -16,7 +16,7 @@ sub load_file {
 
   open my $fh, '<:raw', $path
     or croak "unable to open config file $path: $!";
-  local $/;
+  local $/ = undef;
   my $raw = <$fh>;
   close $fh;
 
@@ -44,7 +44,7 @@ sub normalize {
   my $timeout_seconds = $data->{timeout_seconds};
   $timeout_seconds = 5 unless defined $timeout_seconds;
   croak "sync config timeout_seconds must be a positive integer"
-    unless !ref($timeout_seconds) && $timeout_seconds =~ /\A\d+\z/ && $timeout_seconds > 0;
+    unless !ref($timeout_seconds) && $timeout_seconds =~ /\A\d+\z/mx && $timeout_seconds > 0;
 
   my $peers = $data->{peers};
   croak "sync config peers must be a non-empty array"

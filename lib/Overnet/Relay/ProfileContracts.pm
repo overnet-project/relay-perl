@@ -59,7 +59,7 @@ sub contracts {
 
 sub metadata {
   my ($self) = @_;
-  return undef unless @{$self->{contracts}};
+  return unless @{$self->{contracts}};
 
   return {
     configured => JSON::true,
@@ -72,8 +72,8 @@ sub metadata {
 
 sub validate_event {
   my ($self, $event) = @_;
-  return undef if $self->{policy} eq 'off';
-  return undef unless @{$self->{contracts}};
+  return if $self->{policy} eq 'off';
+  return unless @{$self->{contracts}};
 
   my $event_type_name = _event_type_name($event);
   my $matches = defined $event_type_name
@@ -81,8 +81,8 @@ sub validate_event {
     : [];
 
   if (!@{$matches}) {
-    return undef if $self->{policy} eq 'known';
-    return undef if defined $event_type_name && $CORE_EVENT_TYPE{$event_type_name};
+    return if $self->{policy} eq 'known';
+    return if defined $event_type_name && $CORE_EVENT_TYPE{$event_type_name};
     return 'profile_event.event_type_undefined';
   }
 
@@ -105,7 +105,7 @@ sub _event_type_name {
     next unless ref($tag) eq 'ARRAY' && @{$tag};
     return $tag->[1] if $tag->[0] eq 'overnet_et' && @{$tag} >= 2;
   }
-  return undef;
+  return;
 }
 
 1;

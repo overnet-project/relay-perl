@@ -85,6 +85,7 @@ sub _stop_authoritative_nip29_relay {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _wait_for_authoritative_nip29_relay_ready {
@@ -159,7 +160,7 @@ sub _wait_for_ready_details {
       return 0;
     },
   );
-  return undef unless $ready;
+  return unless $ready;
 
   for my $notification (@{$host->observed_notifications}) {
     next unless ($notification->{method} || '') eq 'program.health';
@@ -168,7 +169,7 @@ sub _wait_for_ready_details {
     return $notification->{params}{details};
   }
 
-  return undef;
+  return;
 }
 
 sub _connect_irc_client {
@@ -192,7 +193,7 @@ sub _connect_irc_client {
 sub _read_client_line {
   my ($client, $timeout_ms) = @_;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
     die "Timed out waiting for IRC client line\n"
@@ -204,19 +205,19 @@ sub _read_client_line {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
 sub _read_client_line_optional {
   my ($client, $timeout_ms) = @_;
 
-  while ($client->{read_buffer} !~ /\n/) {
+  while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
     my @ready = $selector->can_read($timeout_ms / 1000);
-    return undef unless @ready;
+    return unless @ready;
 
     my $bytes = sysread($client->{socket}, my $chunk, 4096);
     die "IRC client disconnected unexpectedly\n"
@@ -224,9 +225,9 @@ sub _read_client_line_optional {
     $client->{read_buffer} .= $chunk;
   }
 
-  $client->{read_buffer} =~ s/\A([^\n]*\n)//;
+  $client->{read_buffer} =~ s/\A([^\n]*\n)//mx;
   my $line = $1;
-  $line =~ s/\r?\n\z//;
+  $line =~ s/\r?\n\z//mx;
   return $line;
 }
 
@@ -241,6 +242,7 @@ sub _write_client_line {
       unless defined $written;
     $offset += $written;
   }
+  return;
 }
 
 sub _assert_registration_prelude {
@@ -255,6 +257,7 @@ sub _assert_registration_prelude {
     sprintf(':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server', $args{server_name}, $args{nick}, $args{network}),
     sprintf(':%s 422 %s :MOTD File is missing', $args{server_name}, $args{nick}),
   ], "$args{nick} receives the minimal registration prelude";
+  return;
 }
 
 sub _pump_hosts_until {
@@ -278,7 +281,7 @@ sub _pump_hosts_until {
 
 sub _pump_hosts_until_client_lines {
   my (%args) = @_;
-  my $client = $args{client} || return undef;
+  my $client = $args{client} || return;
   my $count = $args{count} || 1;
   my @lines;
 
@@ -296,7 +299,7 @@ sub _pump_hosts_until_client_lines {
     },
   );
 
-  return undef unless $ok;
+  return unless $ok;
   return \@lines;
 }
 
@@ -347,9 +350,9 @@ sub _authenticate_and_delegate {
     "$args{nick} pumps the auth challenge request";
   my $challenge_line = _read_client_line($client, 1_000);
   like $challenge_line,
-    qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH CHALLENGE [0-9a-f]{64}\z/,
+    qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
     "$args{nick} receives an authoritative auth challenge";
-  $challenge_line =~ /([0-9a-f]{64})\z/;
+  $challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $challenge = $1;
 
   _write_client_line($client, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
@@ -371,9 +374,9 @@ sub _authenticate_and_delegate {
     "$args{nick} pumps the delegation parameter request";
   my $delegate_line = _read_client_line($client, 3_000);
   like $delegate_line,
-    qr/\A:\Q$args{server_name}\E NOTICE \Q$args{nick}\E :OVERNETAUTH DELEGATE ([0-9a-f]{64}) ([0-9a-f]{64}) \Q$args{relay_url}\E (\d+)\z/,
+    qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx,
     "$args{nick} receives relay-backed delegation parameters";
-  my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64}) ([0-9a-f]{64}) \Q$args{relay_url}\E (\d+)\z/;
+  my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx;
 
   _write_client_line($client, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
     key             => $args{key},
@@ -399,6 +402,7 @@ sub _authenticate_and_delegate {
   is $delegate_ack->[0],
     ":$args{server_name} NOTICE $args{nick} :OVERNETAUTH DELEGATE",
     "$args{nick} establishes the relay-backed delegation";
+  return;
 }
 
 subtest 'IRC server recovers authoritative state from a second live relay without widening or duplicating bootstrap' => sub {

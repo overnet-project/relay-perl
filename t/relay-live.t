@@ -82,6 +82,7 @@ sub _stop_relay_process {
 
   close $proc->{stdout} if $proc->{stdout};
   close $proc->{stderr} if $proc->{stderr};
+  return;
 }
 
 sub _http_request {
@@ -98,7 +99,7 @@ sub _http_request {
   print {$socket} $args{request}
     or die "Can't write HTTP request to relay: $!";
 
-  my $response = do { local $/; <$socket> };
+  my $response = do { local $/ = undef; <$socket> };
   close $socket;
   return $response;
 }
@@ -121,7 +122,7 @@ sub _wait_for_relay_ready {
           '',
         ),
       );
-      return defined $response && $response =~ /\AHTTP\/1\.[01] 200 / ? 1 : 0;
+      return defined $response && $response =~ /\AHTTP\/1\.[01]\ 200\ /mx ? 1 : 0;
     };
 
     return 1 if $ok;
@@ -156,7 +157,7 @@ sub _connect_ws {
 
 sub _decode_http_json_body {
   my ($response) = @_;
-  my (undef, $body) = split /\r\n\r\n/, $response, 2;
+  my (undef, $body) = split /\r\n\r\n/mx, $response, 2;
   return JSON::decode_json($body);
 }
 
@@ -173,8 +174,8 @@ sub _run_relay_backup {
     '--backup-file', $args{backup_file},
   );
 
-  my $stdout_text = do { local $/; <$stdout> };
-  my $stderr_text = do { local $/; <$stderr> };
+  my $stdout_text = do { local $/ = undef; <$stdout> };
+  my $stderr_text = do { local $/ = undef; <$stderr> };
   close $stdout;
   close $stderr;
   waitpid($pid, 0);
@@ -230,7 +231,7 @@ subtest 'relay process serves NIP-11 and supports live publish/query over WebSoc
         '',
       ),
     );
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'NIP-11 endpoint returns HTTP 200';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'NIP-11 endpoint returns HTTP 200';
     my $body = _decode_http_json_body($response);
     ok grep($_ == 77, @{$body->{supported_nips} || []}), 'NIP-11 metadata includes NIP-77';
     ok grep($_ eq 'overnet.events.sync', @{$body->{overnet}{capabilities} || []}),
@@ -343,7 +344,7 @@ subtest 'relay process serves live object reads over HTTP' => sub {
       ),
     );
 
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'object endpoint returns HTTP 200';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'object endpoint returns HTTP 200';
     my $body = _decode_http_json_body($response);
     is $body->{object_type}, 'chat.channel', 'object type matches';
     is $body->{object_id}, 'irc:live:#overnet', 'object id matches';
@@ -412,7 +413,7 @@ subtest 'relay process persists live object state across restart and suppresses 
       ),
     );
 
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'persisted object endpoint returns HTTP 200 after restart';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'persisted object endpoint returns HTTP 200 after restart';
     my $body = _decode_http_json_body($response);
     is $body->{state_event}{id}, $state_event->id, 'persisted state event survives relay restart';
 
@@ -453,7 +454,7 @@ subtest 'relay process persists live object state across restart and suppresses 
     my ($ok_msg) = grep { $_->type eq 'OK' } @received;
     ok $ok_msg, 'duplicate publish still returns OK after restart';
     ok $ok_msg->accepted, 'duplicate publish remains accepted';
-    like $ok_msg->message, qr/\Aaccepted: duplicate /, 'duplicate publish is reported as a duplicate';
+    like $ok_msg->message, qr/\Aaccepted:\ duplicate\ /mx, 'duplicate publish is reported as a duplicate';
 
     my @event_msgs = grep {
       $_->type eq 'EVENT' && (($_->subscription_id || '') eq 'persist-sub')
@@ -530,7 +531,7 @@ subtest 'relay backup script copies persisted relay state for restore' => sub {
       ),
     );
 
-    like $response, qr/\AHTTP\/1\.[01] 200 /, 'restored backup object endpoint returns HTTP 200';
+    like $response, qr/\AHTTP\/1\.[01]\ 200\ /mx, 'restored backup object endpoint returns HTTP 200';
     my $body = _decode_http_json_body($response);
     is $body->{state_event}{id}, $state_event->id, 'restored backup serves the stored state event';
 
@@ -643,7 +644,7 @@ subtest 'relay process supports live negentropy reconciliation with mirror-tag f
     my ($next, $have, $need) = $ne->reconcile($neg_msg->neg_msg);
     is_deeply $have, [], 'empty client has nothing the relay lacks';
     is_deeply $need, [$state_event->id], 'relay reports the matching state event as needed';
-    ok !defined($next) || $next =~ /\A[0-9a-f]+\z/, 'negentropy follow-up message is hex or complete';
+    ok !defined($next) || $next =~ /\A[0-9a-f]+\z/mx, 'negentropy follow-up message is hex or complete';
   };
   my $error = $@;
   _stop_relay_process($proc);
