@@ -4,10 +4,14 @@ use strictures 2;
 
 use parent 'Net::Nostr::RelayStore';
 
+use Carp           qw(croak);
+use English        qw(-no_match_vars);
 use File::Basename qw(dirname);
-use File::Path qw(make_path);
-use JSON ();
+use File::Path     qw(make_path);
+use JSON           ();
 use Net::Nostr::Event;
+
+our $VERSION = '0.001';
 
 my $JSON = JSON->new->utf8->canonical;
 
@@ -15,8 +19,9 @@ sub new {
   my ($class, %args) = @_;
   my $path = delete $args{path};
 
-  die "path is required\n"
-    unless defined $path && !ref($path) && length($path);
+  if (!(defined $path && !ref($path) && length($path))) {
+    croak 'path is required';
+  }
 
   my $self = $class->SUPER::new(%args);
   $self->{path} = $path;
@@ -32,14 +37,18 @@ sub path {
 sub store {
   my ($self, $event) = @_;
   my $stored = Net::Nostr::RelayStore::store($self, $event);
-  $self->_persist_to_disk if $stored;
+  if ($stored) {
+    $self->_persist_to_disk;
+  }
   return $stored;
 }
 
 sub delete_by_id {
   my ($self, $id) = @_;
   my $deleted = Net::Nostr::RelayStore::delete_by_id($self, $id);
-  $self->_persist_to_disk if $deleted;
+  if ($deleted) {
+    $self->_persist_to_disk;
+  }
   return $deleted;
 }
 
@@ -53,23 +62,37 @@ sub clear {
 sub _load_from_disk {
   my ($self) = @_;
   my $path = $self->{path};
-  return 1 unless -e $path;
+  if (!-e $path) {
+    return 1;
+  }
 
-  open my $fh, '<', $path
-    or die "Can't open relay store file $path for reading: $!";
-  local $/ = undef;
+  open my $fh, '<:raw', $path
+    or croak "Can't open relay store file $path for reading: $OS_ERROR";
+  local $INPUT_RECORD_SEPARATOR = undef;
   my $raw = <$fh>;
-  close $fh;
+  close $fh
+    or croak "Can't close relay store file $path after reading: $OS_ERROR";
 
-  return 1 unless defined $raw && length $raw;
+  if (!(defined $raw && length $raw)) {
+    return 1;
+  }
 
-  my $decoded = eval { $JSON->decode($raw) };
-  die "Invalid relay store file $path: $@" if $@;
-  die "Relay store file $path must contain an array\n"
-    unless ref($decoded) eq 'ARRAY';
+  my $decoded;
+  my $loaded = eval {
+    $decoded = $JSON->decode($raw);
+    1;
+  };
+  if (!$loaded) {
+    croak "Invalid relay store file $path: $EVAL_ERROR";
+  }
+  if (ref($decoded) ne 'ARRAY') {
+    croak "Relay store file $path must contain an array";
+  }
 
   for my $wire (@{$decoded}) {
-    next unless ref($wire) eq 'HASH';
+    if (ref($wire) ne 'HASH') {
+      next;
+    }
     my $event = Net::Nostr::Event->from_wire($wire);
     Net::Nostr::RelayStore::store($self, $event);
   }
@@ -79,23 +102,94 @@ sub _load_from_disk {
 
 sub _persist_to_disk {
   my ($self) = @_;
-  my $path = $self->{path};
-  my $dir = dirname($path);
+  my $path   = $self->{path};
+  my $dir    = dirname($path);
 
-  make_path($dir) unless -d $dir;
+  if (!-d $dir) {
+    make_path($dir);
+  }
 
-  my $tmp_path = $path . '.tmp.' . $$;
-  open my $fh, '>', $tmp_path
-    or die "Can't open relay store temp file $tmp_path for writing: $!";
-  print {$fh} $JSON->encode([
-    map { $_->to_hash } @{$self->all_events || []}
-  ]) or die "Can't write relay store temp file $tmp_path: $!";
-  close $fh or die "Can't close relay store temp file $tmp_path: $!";
+  my $tmp_path = $path . '.tmp.' . $PROCESS_ID;
+  open my $fh, '>:raw', $tmp_path
+    or croak "Can't open relay store temp file $tmp_path for writing: $OS_ERROR";
+  print {$fh} $JSON->encode([map { $_->to_hash } @{$self->all_events || []}])
+    or croak "Can't write relay store temp file $tmp_path: $OS_ERROR";
+  close $fh
+    or croak "Can't close relay store temp file $tmp_path: $OS_ERROR";
 
   rename $tmp_path, $path
-    or die "Can't rename relay store temp file $tmp_path to $path: $!";
+    or croak "Can't rename relay store temp file $tmp_path to $path: $OS_ERROR";
 
   return 1;
 }
 
 1;
+
+=head1 NAME
+
+Overnet::Relay::Store::File - File-backed Nostr relay store
+
+=head1 VERSION
+
+Version 0.001.
+
+=head1 SYNOPSIS
+
+  my $store = Overnet::Relay::Store::File->new(path => 'relay-store.json');
+
+=head1 DESCRIPTION
+
+Persists relay events to a canonical JSON file while preserving the
+L<Net::Nostr::RelayStore> API.
+
+=head1 SUBROUTINES/METHODS
+
+=head2 new
+
+Creates a file-backed store.
+
+=head2 path
+
+Returns the configured store path.
+
+=head2 store
+
+Stores an event and persists the store if the event was accepted.
+
+=head2 delete_by_id
+
+Deletes an event and persists the store if an event was removed.
+
+=head2 clear
+
+Clears the store and persists the empty state.
+
+=head1 DIAGNOSTICS
+
+Invalid store files and file-system errors are reported with C<croak>.
+
+=head1 CONFIGURATION AND ENVIRONMENT
+
+The caller supplies the JSON store path.
+
+=head1 DEPENDENCIES
+
+Requires L<JSON> and L<Net::Nostr::RelayStore>.
+
+=head1 INCOMPATIBILITIES
+
+None known.
+
+=head1 BUGS AND LIMITATIONS
+
+Report issues at L<https://github.com/overnet-project/relay-perl/issues>.
+
+=head1 AUTHOR
+
+Nicholas B. Hubbard C<< <nicholashubbard@posteo.net> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is distributed under the GNU General Public License, version 3.
+
+=cut

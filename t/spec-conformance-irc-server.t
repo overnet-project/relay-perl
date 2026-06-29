@@ -4,7 +4,7 @@ use FindBin;
 use File::Spec;
 use Test::More;
 
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server',       'lib');
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 
 use Overnet::Test::SpecConformance qw(

@@ -23,7 +23,8 @@ can_ok(
 );
 
 {
-  package Local::MockChannelCommandServer; ## no critic (Modules::RequireFilenameMatchesPackage)
+
+  package Local::MockChannelCommandServer;
 
   sub new {
     return bless {
@@ -35,7 +36,8 @@ can_ok(
           nick       => 'alice',
         },
       },
-    }, shift;
+      },
+      shift;
   }
 
   sub called {
@@ -44,19 +46,19 @@ can_ok(
 
   sub _send_list_reply {
     my ($self, $client_id, $target) = @_;
-    push @{$self->{called}}, [ list => $client_id, $target ];
+    push @{$self->{called}}, [list => $client_id, $target];
     return 1;
   }
 
   sub _send_need_more_params {
     my ($self, $client_id, $command) = @_;
-    push @{$self->{called}}, [ need_more_params => $client_id, $command ];
+    push @{$self->{called}}, [need_more_params => $client_id, $command];
     return 1;
   }
 
   sub _send_unknown_command {
     my ($self, $client_id, $command) = @_;
-    push @{$self->{called}}, [ unknown_command => $client_id, $command ];
+    push @{$self->{called}}, [unknown_command => $client_id, $command];
     return 1;
   }
 }
@@ -66,13 +68,7 @@ ok(
   Overnet::Program::IRC::Command::Channel::handle_list($mock, 1, ['#overnet']),
   'channel command module handles LIST delegation',
 );
-is_deeply(
-  $mock->called,
-  [
-    [ list => 1, '#overnet' ],
-  ],
-  'LIST delegation calls back into the server list renderer',
-);
+is_deeply($mock->called, [[list => 1, '#overnet'],], 'LIST delegation calls back into the server list renderer',);
 
 $mock = Local::MockChannelCommandServer->new;
 ok(
@@ -81,23 +77,12 @@ ok(
 );
 is_deeply(
   $mock->called,
-  [
-    [ need_more_params => 1, 'OVERNETCHANNEL' ],
-  ],
+  [[need_more_params => 1, 'OVERNETCHANNEL'],],
   'OVERNETCHANNEL delegation preserves the existing parameter validation path',
 );
 
-my $server_path = File::Spec->catfile(
-  $FindBin::Bin,
-  '..',
-  '..',
-  'irc-server',
-  'lib',
-  'Overnet',
-  'Program',
-  'IRC',
-  'Server.pm',
-);
+my $server_path =
+  File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'lib', 'Overnet', 'Program', 'IRC', 'Server.pm',);
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
 my $server_source = do { local $/ = undef; <$server_fh> };

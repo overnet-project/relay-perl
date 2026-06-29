@@ -3,11 +3,8 @@ use strictures 2;
 
 use FindBin;
 use Getopt::Long qw(GetOptions);
-use JSON ();
-use lib grep { -d $_ } (
-  "$FindBin::Bin/../lib",
-  "$FindBin::Bin/../../core-perl/lib",
-);
+use JSON         ();
+use lib grep { -d $_ } ("$FindBin::Bin/../lib", "$FindBin::Bin/../../core-perl/lib",);
 
 use Overnet::Relay::Sync;
 use Overnet::Relay::Sync::Config;
@@ -15,11 +12,11 @@ use Overnet::Relay::Sync::Config;
 my $JSON = JSON->new->utf8->canonical;
 
 my $config_path = '';
-my $help = 0;
+my $help        = 0;
 
 GetOptions(
   'config=s' => \$config_path,
-  'help' => \$help,
+  'help'     => \$help,
 ) or die _usage();
 
 if ($help) {
@@ -31,8 +28,8 @@ die "--config is required\n"
   unless defined $config_path && $config_path ne '';
 
 my $config = Overnet::Relay::Sync::Config->load_file($config_path);
-my $sync = Overnet::Relay::Sync->new(
-  local_url => $config->{local_url},
+my $sync   = Overnet::Relay::Sync->new(
+  local_url       => $config->{local_url},
   timeout_seconds => $config->{timeout_seconds},
 );
 
@@ -40,26 +37,31 @@ my @results;
 for my $peer (@{$config->{peers}}) {
   my $result = $sync->sync_once(
     remote_url => $peer->{remote_url},
-    local_url => $config->{local_url},
-    filter => $peer->{filter},
-    (defined $peer->{subscription_id}
+    local_url  => $config->{local_url},
+    filter     => $peer->{filter},
+    (
+      defined $peer->{subscription_id}
       ? (subscription_id => $peer->{subscription_id})
-      : ()),
+      : ()
+    ),
   );
 
-  push @results, {
+  push @results,
+    {
     (defined $peer->{name} ? (name => $peer->{name}) : ()),
     remote_url => $peer->{remote_url},
-    filter => $peer->{filter_hash},
+    filter     => $peer->{filter_hash},
     %{$result},
-  };
+    };
 }
 
-print $JSON->encode({
-  local_url => $config->{local_url},
-  peer_count => scalar(@results),
-  results => \@results,
-}) . "\n";
+print $JSON->encode(
+  {
+    local_url  => $config->{local_url},
+    peer_count => scalar(@results),
+    results    => \@results,
+  }
+) . "\n";
 
 exit 0;
 

@@ -13,8 +13,8 @@ use_ok('Overnet::Program::IRC::Command::Auth');
   my $server = Overnet::Program::IRC::Server->new;
   $server->{config}{adapter_config}{authority_profile} = 'nip29';
   is_deeply(
-    [ $server->_supported_capabilities ],
-    [ qw(message-tags server-time overnet-e2ee account-tag account-notify sasl) ],
+    [$server->_supported_capabilities],
+    [qw(message-tags server-time overnet-e2ee account-tag account-notify sasl)],
     'server advertises the IRCv3 message-tags, account, and server-time capabilities',
   );
 }
@@ -27,7 +27,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     id           => 1,
     nick         => 'alice',
     capabilities => {
-      'server-time' => 1,
+      'server-time'  => 1,
       'message-tags' => 1,
     },
     socket => $server_sock,
@@ -38,11 +38,11 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     'server sends a tagged outbound line for IRCv3 clients',
   );
   my $buffer = '';
-  my $read = sysread($client_sock, $buffer, 4096);
+  my $read   = sysread($client_sock, $buffer, 4096);
   ok($read, 'tagged outbound payload is readable');
   like(
     $buffer,
-    qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z\ :irc\.example\.test\ 001\ alice\ :Welcome\ to\ Overnet\ IRC\r\n\z/mx,
+qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z\ :irc\.example\.test\ 001\ alice\ :Welcome\ to\ Overnet\ IRC\r\n\z/mx,
     'server-time tag is prepended to outbound IRC lines',
   );
 }
@@ -65,15 +65,15 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     nick             => 'bob',
     authority_pubkey => ('b' x 64),
   };
-  $server->{nick_to_client_id}{ $server->_nick_key('alice') } = 1;
-  $server->{nick_to_client_id}{ $server->_nick_key('bob') } = 2;
+  $server->{nick_to_client_id}{$server->_nick_key('alice')} = 1;
+  $server->{nick_to_client_id}{$server->_nick_key('bob')}   = 2;
 
   ok(
     $server->_send_client_line(1, ':bob PRIVMSG #overnet :Hello from Bob'),
     'server sends an outbound line from an authenticated sender',
   );
   my $buffer = '';
-  my $read = sysread($alice_client_sock, $buffer, 4096);
+  my $read   = sysread($alice_client_sock, $buffer, 4096);
   ok($read, 'tagged account payload is readable');
   is(
     $buffer,
@@ -98,7 +98,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     'server sends an untagged outbound line when no IRCv3 tag capability is enabled',
   );
   my $buffer = '';
-  my $read = sysread($client_sock, $buffer, 4096);
+  my $read   = sysread($client_sock, $buffer, 4096);
   ok($read, 'untagged outbound payload is readable');
   is(
     $buffer,
@@ -112,7 +112,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     or die "socketpair failed: $!";
   my $server = Overnet::Program::IRC::Server->new;
   $server->{config}{server_name} = 'irc.example.test';
-  $server->{clients}{1} = {
+  $server->{clients}{1}          = {
     id           => 1,
     registered   => 1,
     nick         => 'alice',
@@ -122,18 +122,18 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     socket       => $requester_server_sock,
   };
   $server->{clients}{2} = {
-    id                => 2,
-    registered        => 1,
-    nick              => 'bob',
-    username          => 'bob',
-    realname          => 'Bob',
-    authority_pubkey  => ('b' x 64),
-    capabilities      => {},
-    socket            => undef,
-    peerhost          => '127.0.0.1',
+    id               => 2,
+    registered       => 1,
+    nick             => 'bob',
+    username         => 'bob',
+    realname         => 'Bob',
+    authority_pubkey => ('b' x 64),
+    capabilities     => {},
+    socket           => undef,
+    peerhost         => '127.0.0.1',
   };
-  $server->{nick_to_client_id}{ $server->_nick_key('alice') } = 1;
-  $server->{nick_to_client_id}{ $server->_nick_key('bob') } = 2;
+  $server->{nick_to_client_id}{$server->_nick_key('alice')} = 1;
+  $server->{nick_to_client_id}{$server->_nick_key('bob')}   = 2;
 
   my $entry = $server->_whois_entry_for_nick('bob');
   ok($entry, 'WHOIS entry exists for an authenticated user');
@@ -141,7 +141,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
 
   ok($server->_send_whois_reply(1, $entry), 'WHOIS reply renders successfully');
   my $buffer = '';
-  my $read = sysread($requester_client_sock, $buffer, 4096);
+  my $read   = sysread($requester_client_sock, $buffer, 4096);
   ok($read, 'WHOIS reply payload is readable');
   like(
     $buffer,
@@ -165,7 +165,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     joined_channels => {
       '#overnet' => '#overnet',
     },
-    socket       => $alice_server_sock,
+    socket => $alice_server_sock,
   };
   $server->{clients}{2} = {
     id              => 2,
@@ -175,13 +175,13 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     joined_channels => {
       '#overnet' => '#overnet',
     },
-    socket          => undef,
-    peerhost        => '127.0.0.1',
+    socket   => undef,
+    peerhost => '127.0.0.1',
   };
-  $server->{nick_to_client_id}{ $server->_nick_key('alice') } = 1;
-  $server->{nick_to_client_id}{ $server->_nick_key('bob') } = 2;
-  $server->_channel_state('#overnet')->{members}{1} = 1;
-  $server->_channel_state('#overnet')->{members}{2} = 1;
+  $server->{nick_to_client_id}{$server->_nick_key('alice')} = 1;
+  $server->{nick_to_client_id}{$server->_nick_key('bob')}   = 2;
+  $server->_channel_state('#overnet')->{members}{1}         = 1;
+  $server->_channel_state('#overnet')->{members}{2}         = 1;
   $server->_add_visible_nick('#overnet', 'alice');
   $server->_add_visible_nick('#overnet', 'bob');
 
@@ -194,7 +194,7 @@ use_ok('Overnet::Program::IRC::Command::Auth');
     'setting an authenticated account succeeds',
   );
   my $buffer = '';
-  my $read = sysread($alice_client_sock, $buffer, 4096);
+  my $read   = sysread($alice_client_sock, $buffer, 4096);
   ok($read, 'account-notify payload is readable');
   is(
     $buffer,

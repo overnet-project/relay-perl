@@ -5,20 +5,20 @@ use File::Temp qw(tempdir tempfile);
 use FindBin;
 use IO::Select;
 use IO::Socket::INET;
-use IO::Socket::SSL qw(SSL_VERIFY_NONE);
+use IO::Socket::SSL        qw(SSL_VERIFY_NONE);
 use IO::Socket::SSL::Utils qw(CERT_create PEM_cert2file PEM_key2file);
-use IPC::Open3 qw(open3);
-use JSON ();
-use MIME::Base64 qw(encode_base64);
+use IPC::Open3             qw(open3);
+use JSON                   ();
+use MIME::Base64           qw(encode_base64);
 use Overnet::Core::Nostr;
-use POSIX qw(WNOHANG);
-use Symbol qw(gensym);
+use POSIX       qw(WNOHANG);
+use Symbol      qw(gensym);
 use Time::HiRes qw(sleep time);
 
-my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
-my $program_path = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server.pl');
-my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
-my $code_lib = File::Spec->catdir($FindBin::Bin, '..', 'lib');
+my $program_repo   = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
+my $program_path   = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server.pl');
+my $irc_lib        = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
+my $code_lib       = File::Spec->catdir($FindBin::Bin, '..', 'lib');
 my $code_local_lib = File::Spec->catdir($FindBin::Bin, '..', 'local', 'lib', 'perl5');
 
 sub _free_port {
@@ -65,25 +65,20 @@ sub _build_authoritative_auth_event_hash {
     created_at => ($args{created_at} || 1_744_301_000),
     content    => '',
     tags       => [
-      [ 'relay', ($args{scope} || _authoritative_auth_scope()) ],
-      [ 'challenge', ($args{challenge} || _fixed_authoritative_auth_challenge()) ],
+      ['relay',     ($args{scope}     || _authoritative_auth_scope())],
+      ['challenge', ($args{challenge} || _fixed_authoritative_auth_challenge())],
     ],
   );
 }
 
 sub _build_authoritative_auth_payload {
   my (%args) = @_;
-  return encode_base64(
-    JSON::encode_json(
-      _build_authoritative_auth_event_hash(%args)
-    ),
-    '',
-  );
+  return encode_base64(JSON::encode_json(_build_authoritative_auth_event_hash(%args)), '',);
 }
 
 sub _authenticate_payload_chunks {
-  my ($payload) = @_;
-  my $remaining = defined($payload) ? $payload : '';
+  my ($payload)      = @_;
+  my $remaining      = defined($payload) ? $payload : '';
   my $payload_length = length($remaining);
   my @chunks;
   while (length($remaining) > 400) {
@@ -138,7 +133,7 @@ sub _write_client_line {
   my ($client, $line) = @_;
 
   my $payload = $line . "\r\n";
-  my $offset = 0;
+  my $offset  = 0;
   while ($offset < length $payload) {
     my $written = syswrite($client->{socket}, $payload, length($payload) - $offset, $offset);
     die "Failed to write fake IRC client line: $!\n"
@@ -154,7 +149,7 @@ sub _read_client_line {
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
-    my @ready = $selector->can_read($timeout_ms / 1000);
+    my @ready    = $selector->can_read($timeout_ms / 1000);
     die "Timed out waiting for IRC client line at $caller_file line $caller_line\n"
       unless @ready;
 
@@ -175,7 +170,7 @@ sub _read_client_line_optional {
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
-    my @ready = $selector->can_read($timeout_ms / 1000);
+    my @ready    = $selector->can_read($timeout_ms / 1000);
     return unless @ready;
 
     my $bytes = sysread($client->{socket}, my $chunk, 4096);
@@ -198,12 +193,12 @@ sub _observer_join_channel {
 
   is _read_client_line($client, 3_000), ':overnet.irc.local 001 observer :Welcome to Overnet IRC',
     'observer receives 001';
-  is _read_client_line($client, 3_000), ':overnet.irc.local 005 observer CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=local :are supported by this server',
+  is _read_client_line($client, 3_000),
+    ':overnet.irc.local 005 observer CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=local :are supported by this server',
     'observer receives 005';
   is _read_client_line($client, 3_000), ':overnet.irc.local 422 observer :MOTD File is missing',
     'observer receives 422';
-  is _read_client_line($client, 3_000), ':observer JOIN #overnet',
-    'observer receives its JOIN echo';
+  is _read_client_line($client, 3_000), ':observer JOIN #overnet', 'observer receives its JOIN echo';
   like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local\ 353\ observer\ =\ \#overnet\ :observer\z/mx,
     'observer receives NAMES bootstrap';
   is _read_client_line($client, 3_000), ':overnet.irc.local 366 observer #overnet :End of /NAMES list.',
@@ -214,9 +209,9 @@ sub _observer_join_channel {
 sub _drain_client_text {
   my ($client, %args) = @_;
   my $max_wait_ms = $args{max_wait_ms} || 3_000;
-  my $idle_ms = $args{idle_ms} || 250;
-  my $deadline = time() + ($max_wait_ms / 1000);
-  my $text = '';
+  my $idle_ms     = $args{idle_ms}     || 250;
+  my $deadline    = time() + ($max_wait_ms / 1000);
+  my $text        = '';
 
   while (time() < $deadline) {
     my $line = _read_client_line_optional($client, $idle_ms);
@@ -230,7 +225,7 @@ sub _drain_client_text {
 sub _read_client_text_until {
   my ($client, $pattern, $timeout_ms) = @_;
   my $deadline = time() + ($timeout_ms / 1000);
-  my $text = '';
+  my $text     = '';
 
   while (time() < $deadline) {
     my $line = _read_client_line_optional($client, 250);
@@ -245,7 +240,7 @@ sub _read_client_text_until {
 sub _read_ready_json {
   my ($handle, $timeout_ms) = @_;
   my $selector = IO::Select->new($handle);
-  my @ready = $selector->can_read($timeout_ms / 1000);
+  my @ready    = $selector->can_read($timeout_ms / 1000);
   return unless @ready;
   my $line = <$handle>;
   return unless defined $line;
@@ -266,15 +261,15 @@ sub _slurp_handle {
 }
 
 sub _spawn_live_irc_server {
-  my (%args) = @_;
-  my $listen_port = $args{listen_port};
-  my $tls = $args{tls};
-  my $adapter_config = $args{adapter_config} || {};
+  my (%args)               = @_;
+  my $listen_port          = $args{listen_port};
+  my $tls                  = $args{tls};
+  my $adapter_config       = $args{adapter_config} || {};
   my $fixed_auth_challenge = $args{fixed_auth_challenge};
-  my $seed_channel = $args{seed_channel};
-  my $tmpdir = tempdir(CLEANUP => 1);
-  my $script_path = File::Spec->catfile($tmpdir, 'live-irc-server.pl');
-  my $signing_key_file = File::Spec->catfile($tmpdir, 'signing-key.pem');
+  my $seed_channel         = $args{seed_channel};
+  my $tmpdir               = tempdir(CLEANUP => 1);
+  my $script_path          = File::Spec->catfile($tmpdir, 'live-irc-server.pl');
+  my $signing_key_file     = File::Spec->catfile($tmpdir, 'signing-key.pem');
 
   open my $fh, '>', $script_path
     or die "Unable to write $script_path: $!";
@@ -423,18 +418,19 @@ PERL
 
   my %env = (
     %ENV,
-    OVERNET_PROGRAM_LIB      => File::Spec->catdir($program_repo, 'lib'),
-    OVERNET_CODE_LIB         => $code_lib,
-    OVERNET_CODE_LOCAL_LIB   => $code_local_lib,
-    OVERNET_IRC_LIB          => $irc_lib,
-    OVERNET_PROGRAM_PATH     => $program_path,
-    OVERNET_LIVE_PORT        => $listen_port,
-    OVERNET_LIVE_STATE_DIR   => $tmpdir,
+    OVERNET_PROGRAM_LIB         => File::Spec->catdir($program_repo, 'lib'),
+    OVERNET_CODE_LIB            => $code_lib,
+    OVERNET_CODE_LOCAL_LIB      => $code_local_lib,
+    OVERNET_IRC_LIB             => $irc_lib,
+    OVERNET_PROGRAM_PATH        => $program_path,
+    OVERNET_LIVE_PORT           => $listen_port,
+    OVERNET_LIVE_STATE_DIR      => $tmpdir,
     OVERNET_ADAPTER_CONFIG_JSON => JSON::encode_json($adapter_config),
-    OVERNET_SEED_CHANNEL     => (defined($seed_channel) ? $seed_channel : ''),
-    OVERNET_TLS_CERT         => ($tls ? $tls->{cert_chain_file} : ''),
-    OVERNET_TLS_KEY          => ($tls ? $tls->{private_key_file} : ''),
+    OVERNET_SEED_CHANNEL        => (defined($seed_channel) ? $seed_channel            : ''),
+    OVERNET_TLS_CERT            => ($tls                   ? $tls->{cert_chain_file}  : ''),
+    OVERNET_TLS_KEY             => ($tls                   ? $tls->{private_key_file} : ''),
   );
+
   if (defined($fixed_auth_challenge) && length($fixed_auth_challenge)) {
     my $perl5opt = $ENV{PERL5OPT} || '';
     $perl5opt .= ' ' if length $perl5opt;
@@ -444,31 +440,25 @@ PERL
       '-I' . $code_local_lib,
       '-I' . $irc_lib,
       '-MOvernet::Test::ClientInteropHooks';
-    $env{PERL5OPT} = $perl5opt;
+    $env{PERL5OPT}                     = $perl5opt;
     $env{OVERNET_FIXED_AUTH_CHALLENGE} = $fixed_auth_challenge;
   }
 
   my $stderr = gensym();
   local %ENV = %env;
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    $^X,
-    $script_path,
-  );
+  my $pid = open3(my $stdin, my $stdout, $stderr, $^X, $script_path,);
   close $stdin;
 
-  my $ready = _read_ready_json($stdout, 10_000);
+  my $ready         = _read_ready_json($stdout, 10_000);
   my $startup_error = '';
   $startup_error = _slurp_handle($stderr)
     unless $ready;
   return {
-    pid          => $pid,
-    stdout       => $stdout,
-    stderr       => $stderr,
-    tmpdir       => $tmpdir,
-    script_path  => $script_path,
+    pid           => $pid,
+    stdout        => $stdout,
+    stderr        => $stderr,
+    tmpdir        => $tmpdir,
+    script_path   => $script_path,
     startup_error => $startup_error,
     ready_details => $ready,
   };
@@ -497,35 +487,16 @@ sub _stop_spawned_process {
 
 sub _spawn_xvfb {
   my ($display) = @_;
-  my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'Xvfb',
-    $display,
-    '-screen', '0', '1024x768x24',
-  );
+  my $stderr    = gensym();
+  my $pid       = open3(my $stdin, my $stdout, $stderr, 'Xvfb', $display, '-screen', '0', '1024x768x24',);
   close $stdin;
   sleep 1;
   my $wm;
-  for my $candidate (
-    [ 'fluxbox' ],
-    [ 'xfwm4', '--compositor=off' ],
-    [ 'twm' ],
-  ) {
+  for my $candidate (['fluxbox'], ['xfwm4', '--compositor=off'], ['twm'],) {
     next unless -x "/usr/bin/$candidate->[0]";
     my $wm_stderr = gensym();
-    local %ENV = (
-      %ENV,
-      DISPLAY => $display,
-    );
-    my $wm_pid = open3(
-      my $wm_stdin,
-      my $wm_stdout,
-      $wm_stderr,
-      @$candidate,
-    );
+    local %ENV = (%ENV, DISPLAY => $display,);
+    my $wm_pid = open3(my $wm_stdin, my $wm_stdout, $wm_stderr, @$candidate,);
     close $wm_stdin;
     $wm = {
       pid    => $wm_pid,
@@ -544,22 +515,19 @@ sub _spawn_xvfb {
 }
 
 sub _generate_tls_material {
-  my ($dir) = @_;
+  my ($dir)     = @_;
   my $cert_path = File::Spec->catfile($dir, 'irc-server-cert.pem');
-  my $key_path = File::Spec->catfile($dir, 'irc-server-key.pem');
+  my $key_path  = File::Spec->catfile($dir, 'irc-server-key.pem');
 
   my ($cert, $key) = CERT_create(
-    subject => { commonName => '127.0.0.1' },
-    subjectAltNames => [
-      [ IP  => '127.0.0.1' ],
-      [ DNS => 'localhost' ],
-    ],
+    subject         => {commonName => '127.0.0.1'},
+    subjectAltNames => [[IP => '127.0.0.1'], [DNS => 'localhost'],],
   );
   PEM_cert2file($cert, $cert_path);
   PEM_key2file($key, $key_path);
 
   return {
-    cert_chain_file => $cert_path,
+    cert_chain_file  => $cert_path,
     private_key_file => $key_path,
   };
 }
@@ -568,10 +536,10 @@ sub _spawn_authoritative_interop_server {
   my (%args) = @_;
   my $port = $args{listen_port} || _free_port();
   return _spawn_live_irc_server(
-    listen_port         => $port,
+    listen_port          => $port,
     fixed_auth_challenge => _fixed_authoritative_auth_challenge(),
-    seed_channel        => '#overnet',
-    adapter_config      => {
+    seed_channel         => '#overnet',
+    adapter_config       => {
       authority_profile => 'nip29',
       group_host        => 'groups.example.test',
     },
@@ -580,8 +548,8 @@ sub _spawn_authoritative_interop_server {
 
 sub _authenticate_observer_authoritative {
   my ($server) = @_;
-  my $port = $server->{ready_details}{listen_port};
-  my $client = _connect_irc_client($port);
+  my $port     = $server->{ready_details}{listen_port};
+  my $client   = _connect_irc_client($port);
   my $auth_key = Overnet::Core::Nostr->generate_key;
 
   _write_client_line($client, 'CAP LS 302');
@@ -592,29 +560,35 @@ sub _authenticate_observer_authoritative {
 
   like _read_client_line($client, 3_000), qr/\A:overnet\.irc\.local\ CAP\ \*\ LS\ :/mx,
     'authoritative observer receives CAP LS';
-  is _read_client_line($client, 3_000), ':overnet.irc.local CAP * ACK :message-tags server-time account-tag account-notify',
+  is _read_client_line($client, 3_000),
+    ':overnet.irc.local CAP * ACK :message-tags server-time account-tag account-notify',
     'authoritative observer receives CAP ACK';
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 001\ observer\ :Welcome\ to\ Overnet\ IRC\z/mx,
+  like _read_client_line($client, 3_000),
+    qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 001\ observer\ :Welcome\ to\ Overnet\ IRC\z/mx,
     'authoritative observer receives 001';
   like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 005\ observer\ /mx,
     'authoritative observer receives 005';
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 422\ observer\ :MOTD\ File\ is\ missing\z/mx,
+  like _read_client_line($client, 3_000),
+    qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ 422\ observer\ :MOTD\ File\ is\ missing\z/mx,
     'authoritative observer receives 422';
 
   _write_client_line($client, 'OVERNETAUTH CHALLENGE');
-  like _read_client_line($client, 3_000), qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ NOTICE\ observer\ :OVERNETAUTH\ CHALLENGE\ \Q@{[_fixed_authoritative_auth_challenge()]}\E\z/mx,
+  like _read_client_line($client, 3_000),
+qr/\A(?:\@time=\S+\ )?:overnet\.irc\.local\ NOTICE\ observer\ :OVERNETAUTH\ CHALLENGE\ \Q@{[_fixed_authoritative_auth_challenge()]}\E\z/mx,
     'authoritative observer receives fixed auth challenge';
 
   _write_client_line(
     $client,
-    'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
+    'OVERNETAUTH AUTH '
+      . _build_authoritative_auth_payload(
       key       => $auth_key,
       challenge => _fixed_authoritative_auth_challenge(),
       scope     => _authoritative_auth_scope(),
-    ),
+      ),
   );
   my $auth_text = _read_client_text_until($client, qr/OVERNETAUTH\ AUTH\ [0-9a-f]{64}\z/mx, 3_000);
-  like $auth_text, qr/(?:\A|\n)(?:\@time=\S+\ )?(?:\@account=[0-9a-f]{64}\ )?:observer![^ ]+\ ACCOUNT\ [0-9a-f]{64}(?:\n|\z)/mx,
+  like $auth_text,
+    qr/(?:\A|\n)(?:\@time=\S+\ )?(?:\@account=[0-9a-f]{64}\ )?:observer![^ ]+\ ACCOUNT\ [0-9a-f]{64}(?:\n|\z)/mx,
     'authoritative observer sees account identity state during auth';
   like $auth_text, qr/(?:\@time=\S+\ )?:overnet\.irc\.local\ NOTICE\ observer\ :OVERNETAUTH\ AUTH\ [0-9a-f]{64}/mx,
     'authoritative observer authenticates';
@@ -624,7 +598,7 @@ sub _authenticate_observer_authoritative {
 
 sub _run_irssi_smoke {
   my (%args) = @_;
-  my $home = tempdir(CLEANUP => 1);
+  my $home   = tempdir(CLEANUP => 1);
   my $script = File::Spec->catfile($home, 'irssi-smoke.expect');
   open my $fh, '>', $script
     or die "Unable to write $script: $!";
@@ -648,15 +622,7 @@ EXPECT
     or die "Unable to chmod $script: $!";
 
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'expect',
-    $script,
-    $home,
-    $args{port},
-  );
+  my $pid    = open3(my $stdin, my $stdout, $stderr, 'expect', $script, $home, $args{port},);
   close $stdin;
 
   waitpid($pid, 0);
@@ -668,12 +634,12 @@ EXPECT
 }
 
 sub _run_irssi_authoritative_smoke {
-  my (%args) = @_;
-  my $home = tempdir(CLEANUP => 1);
-  my $script = File::Spec->catfile($home, 'irssi-authoritative-smoke.expect');
-  my $auth_key = Overnet::Core::Nostr->generate_key;
+  my (%args)      = @_;
+  my $home        = tempdir(CLEANUP => 1);
+  my $script      = File::Spec->catfile($home, 'irssi-authoritative-smoke.expect');
+  my $auth_key    = Overnet::Core::Nostr->generate_key;
   my $updated_key = Overnet::Core::Nostr->generate_key;
-  my @payload1 = _authenticate_payload_chunks(
+  my @payload1    = _authenticate_payload_chunks(
     _build_authoritative_auth_payload(
       key       => $auth_key,
       challenge => _fixed_authoritative_auth_challenge(),
@@ -712,17 +678,13 @@ EXPECT
     print {$fh} 'send -- ' . _tcl_quote('/quote AUTHENTICATE ' . $chunk . "\r") . "\n";
     print {$fh} "after 800\n";
   }
-  for my $line (
-    '/quote CAP END',
-  ) {
+  for my $line ('/quote CAP END',) {
     print {$fh} 'send -- ' . _tcl_quote($line . "\r") . "\n";
     print {$fh} "after 1500\n";
   }
   print {$fh} 'send -- ' . _tcl_quote('/msg observer hi-from-irssi-auth1' . "\r") . "\n";
   print {$fh} "after 1500\n";
-  for my $line (
-    '/quote AUTHENTICATE NOSTR',
-  ) {
+  for my $line ('/quote AUTHENTICATE NOSTR',) {
     print {$fh} 'send -- ' . _tcl_quote($line . "\r") . "\n";
     print {$fh} "after 1200\n";
   }
@@ -739,15 +701,7 @@ EXPECT
     or die "Unable to chmod $script: $!";
 
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'expect',
-    $script,
-    $home,
-    $args{port},
-  );
+  my $pid    = open3(my $stdin, my $stdout, $stderr, 'expect', $script, $home, $args{port},);
   close $stdin;
 
   waitpid($pid, 0);
@@ -760,19 +714,12 @@ EXPECT
 
 sub _spawn_weechat_smoke {
   my (%args) = @_;
-  my $home = tempdir(CLEANUP => 1);
+  my $home   = tempdir(CLEANUP => 1);
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'timeout',
-    '20',
-    'weechat-headless',
-    '--stdout',
-    '-d', $home,
+  my $pid =
+    open3(my $stdin, my $stdout, $stderr, 'timeout', '20', 'weechat-headless', '--stdout', '-d', $home,
     sprintf('irc://weechat_smoke@127.0.0.1:%d/#overnet', $args{port}),
-  );
+    );
   close $stdin;
 
   my $fifo;
@@ -793,11 +740,11 @@ sub _spawn_weechat_smoke {
 }
 
 sub _spawn_weechat_authoritative_smoke {
-  my (%args) = @_;
-  my $home = tempdir(CLEANUP => 1);
-  my $auth_key = Overnet::Core::Nostr->generate_key;
+  my (%args)      = @_;
+  my $home        = tempdir(CLEANUP => 1);
+  my $auth_key    = Overnet::Core::Nostr->generate_key;
   my $updated_key = Overnet::Core::Nostr->generate_key;
-  my @payload1 = _authenticate_payload_chunks(
+  my @payload1    = _authenticate_payload_chunks(
     _build_authoritative_auth_payload(
       key       => $auth_key,
       challenge => _fixed_authoritative_auth_challenge(),
@@ -814,17 +761,10 @@ sub _spawn_weechat_authoritative_smoke {
   );
 
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'timeout',
-    '40',
-    'weechat-headless',
-    '--stdout',
-    '-d', $home,
+  my $pid =
+    open3(my $stdin, my $stdout, $stderr, 'timeout', '40', 'weechat-headless', '--stdout', '-d', $home,
     sprintf('irc://weechat_auth@127.0.0.1:%d', $args{port}),
-  );
+    );
   close $stdin;
 
   my $fifo;
@@ -844,11 +784,7 @@ sub _spawn_weechat_authoritative_smoke {
   };
   return $proc unless $fifo;
 
-  my @quote_prefixes = (
-    '*/quote ',
-    'irc.127.0.0.1.server */quote ',
-    'irc.server.127.0.0.1 */quote ',
-  );
+  my @quote_prefixes = ('*/quote ', 'irc.127.0.0.1.server */quote ', 'irc.server.127.0.0.1 */quote ',);
   sleep 2.0;
   for my $prefix (@quote_prefixes) {
     _write_weechat_command($proc, $prefix . 'CAP LS 302');
@@ -928,22 +864,13 @@ sub _stop_weechat_smoke {
 
 sub _hexchat_existing_command {
   my (%args) = @_;
-  local %ENV = (
-    %ENV,
-    DISPLAY => $args{display},
-  );
-  return system(
-    'timeout',
-    $args{timeout_seconds} || '5',
-    'hexchat',
-    '--existing',
-    '--command=' . $args{command},
-  );
+  local %ENV = (%ENV, DISPLAY => $args{display},);
+  return system('timeout', $args{timeout_seconds} || '5', 'hexchat', '--existing', '--command=' . $args{command},);
 }
 
 sub _spawn_hexchat_smoke {
-  my (%args) = @_;
-  my $cfgdir = tempdir(CLEANUP => 1);
+  my (%args)     = @_;
+  my $cfgdir     = tempdir(CLEANUP => 1);
   my $addons_dir = File::Spec->catdir($cfgdir, 'addons');
   mkdir $addons_dir
     or die "Unable to create $addons_dir: $!"
@@ -977,9 +904,9 @@ hexchat.hook_print('You Join', _on_you_join)
 PYTHON
   close $addon_fh;
 
-  my $stderr = gensym();
+  my $stderr  = gensym();
   my $display = ':' . (90 + int(rand(100)));
-  my $xvfb = _spawn_xvfb($display);
+  my $xvfb    = _spawn_xvfb($display);
 
   local %ENV = (
     %ENV,
@@ -987,17 +914,13 @@ PYTHON
     SSL_CERT_FILE => $args{cert_chain_file},
   );
 
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'hexchat',
-    '--cfgdir', $cfgdir,
+  my $pid =
+    open3(my $stdin, my $stdout, $stderr, 'hexchat', '--cfgdir', $cfgdir,
     sprintf('ircs://127.0.0.1:%d/#overnet', $args{port}),
-  );
+    );
   close $stdin;
 
-  my $existing_ok = 0;
+  my $existing_ok    = 0;
   my $ready_deadline = time() + 15;
   while (time() < $ready_deadline) {
     my $rc = _hexchat_existing_command(
@@ -1023,16 +946,16 @@ PYTHON
 }
 
 sub _spawn_hexchat_authoritative_smoke {
-  my (%args) = @_;
-  my $cfgdir = tempdir(CLEANUP => 1);
+  my (%args)     = @_;
+  my $cfgdir     = tempdir(CLEANUP => 1);
   my $addons_dir = File::Spec->catdir($cfgdir, 'addons');
   mkdir $addons_dir
     or die "Unable to create $addons_dir: $!"
     unless -d $addons_dir;
 
-  my $auth_key = Overnet::Core::Nostr->generate_key;
+  my $auth_key    = Overnet::Core::Nostr->generate_key;
   my $updated_key = Overnet::Core::Nostr->generate_key;
-  my @payload1 = _authenticate_payload_chunks(
+  my @payload1    = _authenticate_payload_chunks(
     _build_authoritative_auth_payload(
       key       => $auth_key,
       challenge => _fixed_authoritative_auth_challenge(),
@@ -1093,26 +1016,17 @@ hexchat.hook_print('Connected', _start_sequence)
 PYTHON
   close $addon_fh;
 
-  my $stderr = gensym();
+  my $stderr  = gensym();
   my $display = ':' . (190 + int(rand(100)));
-  my $xvfb = _spawn_xvfb($display);
+  my $xvfb    = _spawn_xvfb($display);
 
-  local %ENV = (
-    %ENV,
-    DISPLAY => $display,
-  );
+  local %ENV = (%ENV, DISPLAY => $display,);
 
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    'hexchat',
-    '--cfgdir', $cfgdir,
-    sprintf('irc://127.0.0.1:%d', $args{port}),
-  );
+  my $pid =
+    open3(my $stdin, my $stdout, $stderr, 'hexchat', '--cfgdir', $cfgdir, sprintf('irc://127.0.0.1:%d', $args{port}),);
   close $stdin;
 
-  my $existing_ok = 0;
+  my $existing_ok    = 0;
   my $ready_deadline = time() + 15;
   while (time() < $ready_deadline) {
     my $rc = _hexchat_existing_command(
@@ -1174,7 +1088,7 @@ SKIP: {
   skip 'irssi or expect not installed', 11
     unless -x '/usr/bin/irssi' && -x '/usr/bin/expect';
 
-  my $port = _free_port();
+  my $port   = _free_port();
   my $server = _spawn_live_irc_server(listen_port => $port);
   ok $server->{ready_details}, 'live plain IRC server publishes ready details for irssi smoke coverage';
   my $observer = _connect_irc_client($server->{ready_details}{listen_port});
@@ -1184,8 +1098,7 @@ SKIP: {
   is $result->{exit_code}, 0, 'irssi smoke run exits cleanly';
 
   my $observer_text = _drain_client_text($observer);
-  like $observer_text, qr/:irssi_smoke\ JOIN\ \#overnet/mx,
-    'observer sees irssi join the channel';
+  like $observer_text, qr/:irssi_smoke\ JOIN\ \#overnet/mx, 'observer sees irssi join the channel';
   like $observer_text, qr/:irssi_smoke\ PRIVMSG\ \#overnet\ :hi-from-irssi/mx,
     'observer sees irssi send a channel message';
 
@@ -1202,7 +1115,7 @@ SKIP: {
   skip 'WeeChat not installed', 11
     unless -x '/usr/bin/weechat-headless';
 
-  my $port = _free_port();
+  my $port   = _free_port();
   my $server = _spawn_live_irc_server(listen_port => $port);
   ok $server->{ready_details}, 'live plain IRC server publishes ready details for WeeChat smoke coverage';
   my $observer = _connect_irc_client($server->{ready_details}{listen_port});
@@ -1212,8 +1125,7 @@ SKIP: {
   ok $result->{fifo}, 'WeeChat exposes a fifo control pipe';
 
   my $observer_text = _read_client_text_until($observer, qr/:weechat_smoke\ JOIN\ \#overnet/mx, 8_000);
-  like $observer_text, qr/:weechat_smoke\ JOIN\ \#overnet/mx,
-    'observer sees WeeChat join the channel';
+  like $observer_text, qr/:weechat_smoke\ JOIN\ \#overnet/mx, 'observer sees WeeChat join the channel';
 
   my $message_text = '';
   for my $command (
@@ -1225,7 +1137,8 @@ SKIP: {
     'irc.127.0.0.1.#overnet */quote PRIVMSG #overnet :hi-from-weechat',
   ) {
     _write_weechat_command($result, $command);
-    $message_text = _read_client_text_until($observer, qr/:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx, 1_500);
+    $message_text =
+      _read_client_text_until($observer, qr/:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx, 1_500);
     last if $message_text =~ /:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx;
   }
   like $message_text, qr/:weechat_smoke\ PRIVMSG\ \#overnet\ :hi-from-weechat/mx,
@@ -1248,8 +1161,8 @@ SKIP: {
     unless -x '/usr/bin/hexchat' && -x '/usr/bin/Xvfb';
 
   my $tmpdir = tempdir(CLEANUP => 1);
-  my $tls = _generate_tls_material($tmpdir);
-  my $port = _free_port();
+  my $tls    = _generate_tls_material($tmpdir);
+  my $port   = _free_port();
   my $server = _spawn_live_irc_server(
     listen_port => $port,
     tls         => $tls,
@@ -1265,17 +1178,17 @@ SKIP: {
   ok $result->{existing_ok}, 'HexChat exposes an existing instance for automation';
 
   my $observer_text = _read_client_text_until($observer, qr/:([^ ]+)\ JOIN\ \#overnet/mx, 10_000);
-  like $observer_text, qr/:([^ ]+)\ JOIN\ \#overnet/mx,
-    'observer sees HexChat join the channel';
+  like $observer_text, qr/:([^ ]+)\ JOIN\ \#overnet/mx, 'observer sees HexChat join the channel';
   my ($hex_nick) = $observer_text =~ /:([^ ]+)\ JOIN\ \#overnet/mx;
   ok defined $hex_nick && length $hex_nick, 'HexChat exposes a joined nick';
 
-  my $message_text = _read_client_text_until($observer, qr/:\Q$hex_nick\E\ PRIVMSG\ \#overnet\ :hi-from-hexchat/mx, 5_000);
+  my $message_text =
+    _read_client_text_until($observer, qr/:\Q$hex_nick\E\ PRIVMSG\ \#overnet\ :hi-from-hexchat/mx, 5_000);
   like $message_text, qr/:\Q$hex_nick\E\ PRIVMSG\ \#overnet\ :hi-from-hexchat/mx,
     'observer sees HexChat send a channel message';
 
   my $stop = _stop_hexchat_smoke($result);
-  is $stop->{quit_rc}, 0, 'HexChat accepts the quit command';
+  is $stop->{quit_rc},   0, 'HexChat accepts the quit command';
   is $stop->{exit_code}, 0, 'HexChat smoke run exits cleanly';
 
   my $shutdown_ok = eval {

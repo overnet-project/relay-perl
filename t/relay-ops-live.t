@@ -6,11 +6,11 @@ use File::Spec;
 use FindBin;
 use IO::Socket::INET;
 use IPC::Open3 qw(open3);
-use JSON ();
+use JSON       ();
 use Net::Nostr::Event;
 use Net::Nostr::Key;
 use Net::Nostr::Message;
-use POSIX qw(WNOHANG);
+use POSIX  qw(WNOHANG);
 use Symbol qw(gensym);
 use Test::More;
 use Time::HiRes qw(sleep time);
@@ -32,26 +32,17 @@ sub _free_port {
 }
 
 sub _spawn_relay_process {
-  my (%args) = @_;
-  my $stderr = gensym();
+  my (%args)  = @_;
+  my $stderr  = gensym();
   my @command = (
-    $^X,
-    $relay_script,
-    '--host', '127.0.0.1',
-    '--port', $args{port},
-    '--name', 'Overnet Relay Ops Test',
+    $^X,             $relay_script, '--host', '127.0.0.1', '--port', $args{port}, '--name', 'Overnet Relay Ops Test',
     '--description', 'Relay ops live tests',
-    '--software', 'https://example.invalid/overnet-relay',
-    '--version', '0.1.0-test',
+    '--software',    'https://example.invalid/overnet-relay',
+    '--version',     '0.1.0-test',
   );
   push @command, @{$args{extra_args} || []};
 
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    @command,
-  );
+  my $pid = open3(my $stdin, my $stdout, $stderr, @command,);
 
   close $stdin;
   return {
@@ -91,16 +82,13 @@ sub _wait_for_relay_ready {
   while (time() < $deadline) {
     my $ok = eval {
       my $response = _http_request(
-        port => $port,
-        request => join(
-          "\r\n",
+        port    => $port,
+        request => join("\r\n",
           'GET / HTTP/1.1',
           'Host: 127.0.0.1',
           'Accept: application/nostr+json',
           'Connection: close',
-          '',
-          '',
-        ),
+          '', '',),
       );
       return defined $response && $response =~ /\AHTTP\/1\.[01]\ 200\ /mx ? 1 : 0;
     };
@@ -137,19 +125,21 @@ sub _create_overnet_event {
   return $args{key}->create_event(
     kind => 7800,
     tags => [
-      ['overnet_v', '0.1.0'],
-      ['overnet_et', 'chat.message'],
-      ['overnet_ot', 'chat.channel'],
+      ['overnet_v',   '0.1.0'],
+      ['overnet_et',  'chat.message'],
+      ['overnet_ot',  'chat.channel'],
       ['overnet_oid', 'irc:live:#ops'],
-      ['v', '0.1.0'],
-      ['t', 'chat.message'],
-      ['o', 'chat.channel'],
-      ['d', 'irc:live:#ops'],
+      ['v',           '0.1.0'],
+      ['t',           'chat.message'],
+      ['o',           'chat.channel'],
+      ['d',           'irc:live:#ops'],
     ],
-    content => JSON::encode_json({
-      provenance => { type => 'native' },
-      body       => { text => $args{text} },
-    }),
+    content => JSON::encode_json(
+      {
+        provenance => {type => 'native'},
+        body       => {text => $args{text}},
+      }
+    ),
   );
 }
 
@@ -161,58 +151,53 @@ sub _connect_ws {
   my $timeout;
   $timeout = AnyEvent->timer(
     after => 5,
-    cb => sub {
+    cb    => sub {
       undef $timeout;
-      $cv->send({ ok => 0, error => "websocket connect timed out\n" });
+      $cv->send({ok => 0, error => "websocket connect timed out\n"});
     },
   );
-  $client->connect("ws://127.0.0.1:$port")->cb(sub {
-    my $conn = eval { shift->recv };
-    if ($@) {
+  $client->connect("ws://127.0.0.1:$port")->cb(
+    sub {
+      my $conn = eval { shift->recv };
+      if ($@) {
+        undef $timeout;
+        $cv->send({ok => 0, error => "$@"});
+        return;
+      }
+      my $t;
+      $t = AnyEvent->timer(
+        after => 0.05,
+        cb    => sub {
+          undef $t;
+          $callback->($conn) if $callback;
+        },
+      );
+      $holder = [$client, $conn, $t];
       undef $timeout;
-      $cv->send({ ok => 0, error => "$@" });
-      return;
+      $cv->send({ok => 1, client => $client, conn => $conn, holder => \$holder});
     }
-    my $t;
-    $t = AnyEvent->timer(
-      after => 0.05,
-      cb => sub {
-        undef $t;
-        $callback->($conn) if $callback;
-      },
-    );
-    $holder = [$client, $conn, $t];
-    undef $timeout;
-    $cv->send({ ok => 1, client => $client, conn => $conn, holder => \$holder });
-  });
+  );
   return $cv->recv;
 }
 
 subtest 'relay CLI exposes deploy-time operational controls' => sub {
-  my $stderr = gensym();
-  my $pid = open3(
-    undef,
-    my $stdout,
-    $stderr,
-    $^X,
-    $relay_script,
-    '--help',
-  );
+  my $stderr      = gensym();
+  my $pid         = open3(undef, my $stdout, $stderr, $^X, $relay_script, '--help',);
   my $stdout_text = do { local $/ = undef; <$stdout> };
   close $stdout;
   close $stderr;
   waitpid($pid, 0);
 
   like $stdout_text, qr/--max-connections-per-ip\b/mx, 'relay help exposes connection caps';
-  like $stdout_text, qr/--event-rate-limit\b/mx, 'relay help exposes event rate limiting';
-  like $stdout_text, qr/--min-pow-difficulty\b/mx, 'relay help exposes PoW control';
-  like $stdout_text, qr/--service-policy\b/mx, 'relay help exposes service policy control';
+  like $stdout_text, qr/--event-rate-limit\b/mx,       'relay help exposes event rate limiting';
+  like $stdout_text, qr/--min-pow-difficulty\b/mx,     'relay help exposes PoW control';
+  like $stdout_text, qr/--service-policy\b/mx,         'relay help exposes service policy control';
 };
 
 subtest 'relay enforces max-connections-per-ip' => sub {
   my $port = _free_port();
   my $proc = _spawn_relay_process(
-    port => $port,
+    port       => $port,
     extra_args => ['--max-connections-per-ip', '1'],
   );
   eval {
@@ -234,44 +219,49 @@ subtest 'relay enforces max-connections-per-ip' => sub {
 subtest 'relay enforces event rate limits on publish' => sub {
   my $port = _free_port();
   my $proc = _spawn_relay_process(
-    port => $port,
+    port       => $port,
     extra_args => ['--event-rate-limit', '1/60'],
   );
   eval {
     _wait_for_relay_ready($port);
     my @received;
-    my $cv = AnyEvent->condvar;
-    my $conn_result = _connect_ws($port, sub {
-      my ($conn) = @_;
-      my $phase = 'first';
-      my $key = Net::Nostr::Key->new;
-      my $first = _create_overnet_event(key => $key, text => 'first');
-      my $second = _create_overnet_event(key => $key, text => 'second');
+    my $cv          = AnyEvent->condvar;
+    my $conn_result = _connect_ws(
+      $port,
+      sub {
+        my ($conn) = @_;
+        my $phase  = 'first';
+        my $key    = Net::Nostr::Key->new;
+        my $first  = _create_overnet_event(key => $key, text => 'first');
+        my $second = _create_overnet_event(key => $key, text => 'second');
 
-      $conn->on(each_message => sub {
-        my (undef, $msg) = @_;
-        my $parsed = Net::Nostr::Message->parse($msg->body);
-        push @received, $parsed;
+        $conn->on(
+          each_message => sub {
+            my (undef, $msg) = @_;
+            my $parsed = Net::Nostr::Message->parse($msg->body);
+            push @received, $parsed;
 
-        if ($phase eq 'first' && $parsed->type eq 'OK') {
-          $phase = 'second';
-          $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $second)->serialize);
-          return;
-        }
+            if ($phase eq 'first' && $parsed->type eq 'OK') {
+              $phase = 'second';
+              $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $second)->serialize);
+              return;
+            }
 
-        if ($phase eq 'second' && $parsed->type eq 'OK') {
-          $cv->send;
-        }
-      });
+            if ($phase eq 'second' && $parsed->type eq 'OK') {
+              $cv->send;
+            }
+          }
+        );
 
-      $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $first)->serialize);
-    });
+        $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $first)->serialize);
+      }
+    );
     ok $conn_result->{ok}, 'websocket connection succeeds';
     $cv->recv;
 
     my @ok_messages = grep { $_->type eq 'OK' } @received;
     is scalar(@ok_messages), 2, 'rate-limit flow returns two OK messages';
-    ok $ok_messages[0]->accepted, 'first publish is accepted';
+    ok $ok_messages[0]->accepted,  'first publish is accepted';
     ok !$ok_messages[1]->accepted, 'second publish is rejected';
     like $ok_messages[1]->message, qr/rate\ limited/imx, 'second publish reports rate limiting';
 
@@ -285,34 +275,36 @@ subtest 'relay enforces event rate limits on publish' => sub {
 subtest 'relay enforces closed publish and object-read service policies' => sub {
   my $port = _free_port();
   my $proc = _spawn_relay_process(
-    port => $port,
-    extra_args => [
-      '--service-policy', 'publish=closed',
-      '--service-policy', 'object_read=closed',
-    ],
+    port       => $port,
+    extra_args => ['--service-policy', 'publish=closed', '--service-policy', 'object_read=closed',],
   );
   eval {
     _wait_for_relay_ready($port);
     my @received;
-    my $cv = AnyEvent->condvar;
-    my $conn_result = _connect_ws($port, sub {
-      my ($conn) = @_;
-      my $phase = 'publish';
-      my $key = Net::Nostr::Key->new;
-      my $event = _create_overnet_event(key => $key, text => 'blocked');
+    my $cv          = AnyEvent->condvar;
+    my $conn_result = _connect_ws(
+      $port,
+      sub {
+        my ($conn) = @_;
+        my $phase  = 'publish';
+        my $key    = Net::Nostr::Key->new;
+        my $event  = _create_overnet_event(key => $key, text => 'blocked');
 
-      $conn->on(each_message => sub {
-        my (undef, $msg) = @_;
-        my $parsed = Net::Nostr::Message->parse($msg->body);
-        push @received, $parsed;
+        $conn->on(
+          each_message => sub {
+            my (undef, $msg) = @_;
+            my $parsed = Net::Nostr::Message->parse($msg->body);
+            push @received, $parsed;
 
-        if ($phase eq 'publish' && $parsed->type eq 'OK') {
-          $cv->send;
-        }
-      });
+            if ($phase eq 'publish' && $parsed->type eq 'OK') {
+              $cv->send;
+            }
+          }
+        );
 
-      $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $event)->serialize);
-    });
+        $conn->send(Net::Nostr::Message->new(type => 'EVENT', event => $event)->serialize);
+      }
+    );
     ok $conn_result->{ok}, 'websocket connection succeeds';
     $cv->recv;
 
@@ -322,15 +314,12 @@ subtest 'relay enforces closed publish and object-read service policies' => sub 
     $conn_result->{conn}->close;
 
     my $response = _http_request(
-      port => $port,
-      request => join(
-        "\r\n",
+      port    => $port,
+      request => join("\r\n",
         'GET /.well-known/overnet/v1/object?type=chat.channel&id=irc%3Alive%3A%23ops HTTP/1.1',
         'Host: 127.0.0.1',
         'Connection: close',
-        '',
-        '',
-      ),
+        '', '',),
     );
     like $response, qr/\AHTTP\/1\.[01]\ 403\ /mx, 'closed object-read policy returns HTTP 403';
     my (undef, $body) = split /\r\n\r\n/mx, $response, 2;

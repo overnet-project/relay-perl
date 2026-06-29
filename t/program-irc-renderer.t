@@ -29,8 +29,8 @@ can_ok(
 
 is_deeply(
   Overnet::Program::IRC::Renderer::registration_prelude_lines(
-    server_name    => 'overnet.irc.local',
-    nick           => 'alice',
+    server_name     => 'overnet.irc.local',
+    nick            => 'alice',
     isupport_tokens => 'CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=irc.test',
   ),
   [
@@ -66,7 +66,7 @@ is_deeply(
     server_name => 'overnet.irc.local',
     nick        => 'alice',
     channel     => '#overnet',
-    names       => [ '@alice', '+bob' ],
+    names       => ['@alice', '+bob'],
   ),
   [
     ':overnet.irc.local 353 alice = #overnet :@alice +bob',
@@ -208,33 +208,20 @@ is(
   'renderer formats nick-in-use replies',
 );
 
-my $server_path = File::Spec->catfile(
-  $FindBin::Bin,
-  '..',
-  '..',
-  'irc-server',
-  'lib',
-  'Overnet',
-  'Program',
-  'IRC',
-  'Server.pm',
-);
+my $server_path =
+  File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'lib', 'Overnet', 'Program', 'IRC', 'Server.pm',);
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
 my $server_source = do { local $/ = undef; <$server_fh> };
 close $server_fh;
 
-like $server_source, qr/use\ Overnet::Program::IRC::Renderer;/mx,
-  'Server.pm loads the dedicated IRC renderer module';
+like $server_source, qr/use\ Overnet::Program::IRC::Renderer;/mx, 'Server.pm loads the dedicated IRC renderer module';
 unlike $server_source, qr/421\ %s\ %s\ :Unknown\ command/mx,
   'Server.pm no longer formats unknown-command numerics directly';
 unlike $server_source, qr/001\ %s\ :Welcome\ to\ Overnet\ IRC/mx,
   'Server.pm no longer formats registration numerics directly';
-unlike $server_source, qr/321\ %s\ Channel\ :Users\ Name/mx,
-  'Server.pm no longer formats LIST numerics directly';
-unlike $server_source, qr/353\ %s\ =\ %s\ :%s/mx,
-  'Server.pm no longer formats NAMES numerics directly';
-unlike $server_source, qr/367\ %s\ %s\ %s\ %s\ 0/mx,
-  'Server.pm no longer formats ban-list numerics directly';
+unlike $server_source, qr/321\ %s\ Channel\ :Users\ Name/mx, 'Server.pm no longer formats LIST numerics directly';
+unlike $server_source, qr/353\ %s\ =\ %s\ :%s/mx,            'Server.pm no longer formats NAMES numerics directly';
+unlike $server_source, qr/367\ %s\ %s\ %s\ %s\ 0/mx,         'Server.pm no longer formats ban-list numerics directly';
 
 done_testing;

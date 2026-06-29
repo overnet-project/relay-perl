@@ -24,7 +24,8 @@ can_ok(
 );
 
 {
-  package Local::MockAuthorityCoordinatorServer; ## no critic (Modules::RequireFilenameMatchesPackage)
+
+  package Local::MockAuthorityCoordinatorServer;
 
   sub new {
     return bless {
@@ -32,8 +33,9 @@ can_ok(
         network => 'example.test',
       },
       authoritative_grant_subscription_id => undef,
-      called => [],
-    }, shift;
+      called                              => [],
+      },
+      shift;
   }
 
   sub called {
@@ -63,7 +65,7 @@ can_ok(
   sub _request {
     my ($self, %args) = @_;
     push @{$self->{called}}, \%args;
-    return { events => [] };
+    return {events => []};
   }
 
   sub _authoritative_group_binding {
@@ -84,12 +86,7 @@ is(
 );
 
 is_deeply(
-  [
-    Overnet::Program::IRC::Authority::Coordinator::authoritative_channel_subscription_ids(
-      $mock,
-      '#ops',
-    )
-  ],
+  [Overnet::Program::IRC::Authority::Coordinator::authoritative_channel_subscription_ids($mock, '#ops',)],
   [
     'irc.authority.meta:example.test:groups.example.test:ops',
     'irc.authority.control:example.test:groups.example.test:ops',
@@ -100,16 +97,14 @@ is_deeply(
 $mock->{called} = [];
 is_deeply(
   Overnet::Program::IRC::Authority::Coordinator::load_authoritative_nip29_events(
-    $mock,
-    '#ops',
-    refresh => 1,
+    $mock, '#ops', refresh => 1,
   ),
   [],
   'forced authoritative channel reads use direct relay queries',
 );
 is_deeply(
-  [ map { $_->{method} } @{$mock->called} ],
-  [ 'nostr.query_events', 'nostr.query_events' ],
+  [map { $_->{method} } @{$mock->called}],
+  ['nostr.query_events', 'nostr.query_events'],
   'forced authoritative channel reads do not open long-lived subscriptions before publishing',
 );
 
@@ -140,17 +135,8 @@ is_deeply(
   'grant subscription coordination goes through the runtime Nostr service',
 );
 
-my $server_path = File::Spec->catfile(
-  $FindBin::Bin,
-  '..',
-  '..',
-  'irc-server',
-  'lib',
-  'Overnet',
-  'Program',
-  'IRC',
-  'Server.pm',
-);
+my $server_path =
+  File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'lib', 'Overnet', 'Program', 'IRC', 'Server.pm',);
 open my $server_fh, '<', $server_path
   or die "Unable to read $server_path: $!";
 my $server_source = do { local $/ = undef; <$server_fh> };

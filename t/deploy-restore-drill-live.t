@@ -5,20 +5,20 @@ use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
 use IO::Socket::INET;
-use IPC::Open3 qw(open3);
-use JSON ();
+use IPC::Open3   qw(open3);
+use JSON         ();
 use MIME::Base64 qw(encode_base64);
 use Net::Nostr::Client;
 use Net::Nostr::Event;
 use Net::Nostr::Group;
 use Net::Nostr::Key;
 use Overnet::Core::Nostr;
-use POSIX qw(WNOHANG);
+use POSIX  qw(WNOHANG);
 use Symbol qw(gensym);
 use Test::More;
 use Time::HiRes qw(sleep time);
 
-our $CURRENT_IRC_LOG = '';
+our $CURRENT_IRC_LOG    = '';
 our $CURRENT_IRC_HEALTH = '';
 our $CURRENT_IRC_STDERR;
 
@@ -38,13 +38,8 @@ sub _free_port {
 
 sub _spawn_process {
   my (@command) = @_;
-  my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    @command,
-  );
+  my $stderr    = gensym();
+  my $pid       = open3(my $stdin, my $stdout, $stderr, @command,);
   close $stdin;
   return {
     pid    => $pid,
@@ -164,7 +159,7 @@ sub _write_client_line {
   my ($client, $line) = @_;
 
   my $payload = $line . "\r\n";
-  my $offset = 0;
+  my $offset  = 0;
   while ($offset < length $payload) {
     my $written = syswrite($client->{socket}, $payload, length($payload) - $offset, $offset);
     die "Failed to write fake IRC client line: $!\n"
@@ -181,11 +176,16 @@ sub _assert_registration_prelude {
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
-  ], [
+    ],
+    [
     sprintf(':%s 001 %s :Welcome to Overnet IRC', $args{server_name}, $args{nick}),
-    sprintf(':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server', $args{server_name}, $args{nick}, $args{network}),
+    sprintf(
+      ':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server',
+      $args{server_name}, $args{nick}, $args{network}
+    ),
     sprintf(':%s 422 %s :MOTD File is missing', $args{server_name}, $args{nick}),
-  ], "$args{nick} receives the minimal registration prelude";
+    ],
+    "$args{nick} receives the minimal registration prelude";
   return;
 }
 
@@ -200,10 +200,7 @@ sub _build_authoritative_auth_payload {
     kind       => 22242,
     created_at => 1_744_301_000,
     content    => '',
-    tags       => [
-      [ 'relay', $args{scope} ],
-      [ 'challenge', $args{challenge} ],
-    ],
+    tags       => [['relay', $args{scope}], ['challenge', $args{challenge}],],
   );
   return encode_base64(JSON::encode_json($event->to_hash), '');
 }
@@ -215,32 +212,36 @@ sub _build_authoritative_delegate_payload {
     created_at => 1_744_301_100,
     content    => '',
     tags       => [
-      [ 'relay', $args{relay_url} ],
-      [ 'server', $args{scope} ],
-      [ 'delegate', $args{delegate_pubkey} ],
-      [ 'session', $args{session_id} ],
-      [ 'expires_at', $args{expires_at} ],
-      (defined($args{nick}) ? ([ 'nick', $args{nick} ]) : ()),
+      ['relay',      $args{relay_url}],
+      ['server',     $args{scope}],
+      ['delegate',   $args{delegate_pubkey}],
+      ['session',    $args{session_id}],
+      ['expires_at', $args{expires_at}],
+      (defined($args{nick}) ? (['nick', $args{nick}]) : ()),
     ],
   );
   return encode_base64(JSON::encode_json($event->to_hash), '');
 }
 
 sub _publish_nostr_event_to_relay {
-  my (%args) = @_;
-  my $client = Net::Nostr::Client->new;
-  my $cv = AnyEvent->condvar;
-  my $wire = Net::Nostr::Event->from_wire($args{event});
+  my (%args)   = @_;
+  my $client   = Net::Nostr::Client->new;
+  my $cv       = AnyEvent->condvar;
+  my $wire     = Net::Nostr::Event->from_wire($args{event});
   my $event_id = $wire->id;
 
-  $client->on(ok => sub {
-    my ($current_id, $accepted, $message) = @_;
-    return unless $current_id eq $event_id;
-    $cv->send({
-      accepted => $accepted ? 1 : 0,
-      message  => $message,
-    });
-  });
+  $client->on(
+    ok => sub {
+      my ($current_id, $accepted, $message) = @_;
+      return unless $current_id eq $event_id;
+      $cv->send(
+        {
+          accepted => $accepted ? 1 : 0,
+          message  => $message,
+        }
+      );
+    }
+  );
 
   $client->connect($args{relay_url});
   $client->publish($wire);
@@ -252,14 +253,10 @@ sub _publish_nostr_event_to_relay {
 sub _run_relay_backup {
   my (%args) = @_;
   my $stderr = gensym();
-  my $pid = open3(
-    undef,
-    my $stdout,
-    $stderr,
-    $^X,
-    $args{script},
-    '--source-store-file', $args{source_store_file},
-    '--backup-file', $args{backup_file},
+  my $pid    = open3(
+    undef,         my $stdout,            $stderr,                  $^X,
+    $args{script}, '--source-store-file', $args{source_store_file}, '--backup-file',
+    $args{backup_file},
   );
 
   my $stdout_text = do { local $/ = undef; <$stdout> };
@@ -275,51 +272,44 @@ sub _run_relay_backup {
   };
 }
 
-my $code_root = File::Spec->catdir($FindBin::Bin, '..');
-my $project_root = File::Spec->catdir($code_root, '..');
-my $irc_root = File::Spec->catdir($project_root, 'irc-server');
+my $code_root    = File::Spec->catdir($FindBin::Bin, '..');
+my $project_root = File::Spec->catdir($code_root,    '..');
+my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
-my $relay_backup_script = File::Spec->catfile($code_root, 'bin', 'overnet-relay-backup.pl');
-my $authority_relay_service_script = File::Spec->catfile($irc_root, 'bin', 'overnet-irc-authority-relay-service.pl');
-my $irc_service_script = File::Spec->catfile($irc_root, 'bin', 'overnet-irc-service.pl');
+my $relay_backup_script            = File::Spec->catfile($code_root, 'bin', 'overnet-relay-backup.pl');
+my $authority_relay_service_script = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-authority-relay-service.pl');
+my $irc_service_script             = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-service.pl');
 
 ok -f $authority_relay_service_script, 'authoritative IRC relay service wrapper exists';
 
 subtest 'backup-restored authoritative relay service plus fresh IRC service restores hosted channel state' => sub {
-  my $dir = tempdir(CLEANUP => 1);
-  my $relay_port = _free_port();
-  my $irc_port = _free_port();
-  my $relay_url = "ws://127.0.0.1:$relay_port";
-  my $network = 'deploy-restore';
-  my $server_name = 'irc.deploy.restore.test';
-  my $channel = '#ops';
-  my $group_id = 'ops';
-  my $group_host = 'groups.deploy.restore.test';
-  my $alice_key = Net::Nostr::Key->new;
-  my $alice_pubkey = $alice_key->pubkey_hex;
-  my $seed_key = Net::Nostr::Key->new;
-  my $relay_store = File::Spec->catfile($dir, 'authority-relay-store.json');
-  my $relay_backup = File::Spec->catfile($dir, 'authority-relay-store.backup.json');
-  my $relay_health = File::Spec->catfile($dir, 'authority-relay-health.json');
-  my $relay_log = File::Spec->catfile($dir, 'authority-relay.log');
+  my $dir                   = tempdir(CLEANUP => 1);
+  my $relay_port            = _free_port();
+  my $irc_port              = _free_port();
+  my $relay_url             = "ws://127.0.0.1:$relay_port";
+  my $network               = 'deploy-restore';
+  my $server_name           = 'irc.deploy.restore.test';
+  my $channel               = '#ops';
+  my $group_id              = 'ops';
+  my $group_host            = 'groups.deploy.restore.test';
+  my $alice_key             = Net::Nostr::Key->new;
+  my $alice_pubkey          = $alice_key->pubkey_hex;
+  my $seed_key              = Net::Nostr::Key->new;
+  my $relay_store           = File::Spec->catfile($dir, 'authority-relay-store.json');
+  my $relay_backup          = File::Spec->catfile($dir, 'authority-relay-store.backup.json');
+  my $relay_health          = File::Spec->catfile($dir, 'authority-relay-health.json');
+  my $relay_log             = File::Spec->catfile($dir, 'authority-relay.log');
   my $restored_relay_health = File::Spec->catfile($dir, 'restored-authority-relay-health.json');
-  my $restored_relay_log = File::Spec->catfile($dir, 'restored-authority-relay.log');
-  my $irc_health = File::Spec->catfile($dir, 'irc-health.json');
-  my $irc_log = File::Spec->catfile($dir, 'irc.log');
-  my $signing_key_file = File::Spec->catfile($dir, 'irc-signing-key.pem');
-  local $CURRENT_IRC_LOG = $irc_log;
+  my $restored_relay_log    = File::Spec->catfile($dir, 'restored-authority-relay.log');
+  my $irc_health            = File::Spec->catfile($dir, 'irc-health.json');
+  my $irc_log               = File::Spec->catfile($dir, 'irc.log');
+  my $signing_key_file      = File::Spec->catfile($dir, 'irc-signing-key.pem');
+  local $CURRENT_IRC_LOG    = $irc_log;
   local $CURRENT_IRC_HEALTH = $irc_health;
 
-  my $relay_proc = _spawn_process(
-    $^X,
-    $authority_relay_service_script,
-    '--host', '127.0.0.1',
-    '--port', $relay_port,
-    '--relay-url', $relay_url,
-    '--store-file', $relay_store,
-    '--health-file', $relay_health,
-    '--log-file', $relay_log,
-  );
+  my $relay_proc = _spawn_process($^X, $authority_relay_service_script,
+    '--host',        '127.0.0.1',   '--port',     $relay_port, '--relay-url', $relay_url, '--store-file', $relay_store,
+    '--health-file', $relay_health, '--log-file', $relay_log,);
 
   eval {
     my $relay_ready = _wait_for_health($relay_health);
@@ -341,8 +331,8 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       created_at => 1_744_304_000,
       closed     => 1,
     )->to_hash;
-    push @{$metadata->{tags}}, [ 'topic', 'Service Restored Topic' ];
-    push @{$metadata->{tags}}, [ 'ban', '*!*@blocked.example' ];
+    push @{$metadata->{tags}}, ['topic', 'Service Restored Topic'];
+    push @{$metadata->{tags}}, ['ban',   '*!*@blocked.example'];
     my $admins = Net::Nostr::Group->admins(
       pubkey     => 'f' x 64,
       group_id   => $group_id,
@@ -358,27 +348,20 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       pubkey     => 'f' x 64,
       group_id   => $group_id,
       created_at => 1_744_304_002,
-      members    => [ $alice_pubkey ],
+      members    => [$alice_pubkey],
     )->to_hash;
     my $roles = Net::Nostr::Group->roles(
       pubkey     => 'f' x 64,
       group_id   => $group_id,
       created_at => 1_744_304_003,
-      roles      => [
-        { name => 'irc.operator' },
-        { name => 'irc.voice' },
-      ],
+      roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
     )->to_hash;
     my $joined = $seed_key->create_event(
       kind       => 9021,
       created_at => 1_744_304_004,
       content    => '',
-      tags       => [
-        [ 'h', $group_id ],
-        [ 'overnet_actor', $alice_pubkey ],
-        [ 'overnet_authority', 'e' x 64 ],
-        [ 'overnet_sequence', 2 ],
-      ],
+      tags       =>
+        [['h', $group_id], ['overnet_actor', $alice_pubkey], ['overnet_authority', 'e' x 64], ['overnet_sequence', 2],],
     )->to_hash;
 
     for my $event ((map { $sign_group_event->($_) } ($metadata, $admins, $members, $roles)), $joined) {
@@ -401,14 +384,10 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     ok -f $relay_backup, 'relay backup command writes the backup file';
 
     $relay_proc = _spawn_process(
-      $^X,
-      $authority_relay_service_script,
-      '--host', '127.0.0.1',
-      '--port', $relay_port,
-      '--relay-url', $relay_url,
-      '--store-file', $relay_backup,
-      '--health-file', $restored_relay_health,
-      '--log-file', $restored_relay_log,
+      $^X,            $authority_relay_service_script, '--host',        '127.0.0.1',
+      '--port',       $relay_port,                     '--relay-url',   $relay_url,
+      '--store-file', $relay_backup,                   '--health-file', $restored_relay_health,
+      '--log-file',   $restored_relay_log,
     );
     my $restored_ready = _wait_for_health($restored_relay_health);
     is $restored_ready->{details}{relay_url}, $relay_url, 'restored authoritative relay reports the same relay URL';
@@ -418,21 +397,20 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       created_at => 1_744_304_010,
       content    => '',
       tags       => [
-        [ 'h', $group_id ],
-        [ 'closed' ],
-        [ 'topic', 'Service Restored Topic' ],
-        [ 'ban', '*!*@blocked.example' ],
-        [ 'overnet_actor', $alice_pubkey ],
-        [ 'overnet_authority', 'e' x 64 ],
-        [ 'overnet_sequence', 1 ],
+        ['h', $group_id],
+        ['closed'],
+        ['topic',             'Service Restored Topic'],
+        ['ban',               '*!*@blocked.example'],
+        ['overnet_actor',     $alice_pubkey],
+        ['overnet_authority', 'e' x 64],
+        ['overnet_sequence',  1],
       ],
     )->to_hash;
     my $restored_metadata_publish = _publish_nostr_event_to_relay(
       relay_url => $relay_url,
       event     => $restored_metadata_edit,
     );
-    ok $restored_metadata_publish->{accepted},
-      'restored authoritative relay accepts operator metadata edits';
+    ok $restored_metadata_publish->{accepted}, 'restored authoritative relay accepts operator metadata edits';
     my $restored_events = Overnet::Core::Nostr->query_events(
       relay_url => $relay_url,
       filters   => [
@@ -442,28 +420,27 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       ],
       timeout_ms => 3_000,
     );
-    my %restored_event_ids = map {
-      defined($_->{id}) && !ref($_->{id}) ? ($_->{id} => 1) : ()
-    } @{$restored_events || []};
+    my %restored_event_ids =
+      map { defined($_->{id}) && !ref($_->{id}) ? ($_->{id} => 1) : () } @{$restored_events || []};
     ok $restored_event_ids{$joined->{id}}, 'restored authoritative relay retains the durable join presence event';
-    ok $restored_event_ids{$restored_metadata_edit->{id}}, 'restored authoritative relay retains the operator metadata edit';
+    ok $restored_event_ids{$restored_metadata_edit->{id}},
+      'restored authoritative relay retains the operator metadata edit';
 
     my $irc_proc = _spawn_process(
-      $^X,
-      $irc_service_script,
-      '--adapter-id', 'irc.deploy.restore',
-      '--network', $network,
-      '--listen-host', '127.0.0.1',
-      '--listen-port', $irc_port,
-      '--server-name', $server_name,
-      '--signing-key-file', $signing_key_file,
-      '--group-host', $group_host,
-      '--channel-group', "$channel=$group_id",
-      '--authority-relay-url', $relay_url,
+      $^X,                                  $irc_service_script,
+      '--adapter-id',                       'irc.deploy.restore',
+      '--network',                          $network,
+      '--listen-host',                      '127.0.0.1',
+      '--listen-port',                      $irc_port,
+      '--server-name',                      $server_name,
+      '--signing-key-file',                 $signing_key_file,
+      '--group-host',                       $group_host,
+      '--channel-group',                    "$channel=$group_id",
+      '--authority-relay-url',              $relay_url,
       '--authority-relay-poll-interval-ms', 50,
       '--authority-relay-query-timeout-ms', 3_000,
-      '--health-file', $irc_health,
-      '--log-file', $irc_log,
+      '--health-file',                      $irc_health,
+      '--log-file',                         $irc_log,
     );
     local $CURRENT_IRC_STDERR = $irc_proc->{stderr};
 
@@ -488,14 +465,18 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     $challenge_line =~ /([0-9a-f]{64})\z/mx;
     my $challenge = $1;
 
-    _write_client_line($alice, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
-      key       => $alice_key,
-      challenge => $challenge,
-      scope     => _authoritative_auth_scope(
-        server_name => $server_name,
-        network     => $network,
-      ),
-    ));
+    _write_client_line(
+      $alice,
+      'OVERNETAUTH AUTH '
+        . _build_authoritative_auth_payload(
+        key       => $alice_key,
+        challenge => $challenge,
+        scope     => _authoritative_auth_scope(
+          server_name => $server_name,
+          network     => $network,
+        ),
+        )
+    );
     is _read_client_line($alice, 3_000),
       ":$server_name NOTICE alice :OVERNETAUTH AUTH $alice_pubkey",
       'fresh IRC service accepts the restored authoritative auth flow';
@@ -503,22 +484,27 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     _write_client_line($alice, 'OVERNETAUTH DELEGATE');
     my $delegate_line = _read_client_line($alice, 3_000);
     like $delegate_line,
-      qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
+qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx,
       'fresh IRC service exposes relay-backed delegation parameters after restore';
-    my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
+    my ($delegate_pubkey, $session_id, $expires_at) =
+      $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$relay_url\E\ (\d+)\z/mx;
 
-    _write_client_line($alice, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
-      key             => $alice_key,
-      relay_url       => $relay_url,
-      scope           => _authoritative_auth_scope(
-        server_name => $server_name,
-        network     => $network,
-      ),
-      delegate_pubkey => $delegate_pubkey,
-      session_id      => $session_id,
-      expires_at      => $expires_at,
-      nick            => 'alice',
-    ));
+    _write_client_line(
+      $alice,
+      'OVERNETAUTH DELEGATE '
+        . _build_authoritative_delegate_payload(
+        key       => $alice_key,
+        relay_url => $relay_url,
+        scope     => _authoritative_auth_scope(
+          server_name => $server_name,
+          network     => $network,
+        ),
+        delegate_pubkey => $delegate_pubkey,
+        session_id      => $session_id,
+        expires_at      => $expires_at,
+        nick            => 'alice',
+        )
+    );
     is _read_client_line($alice, 3_000),
       ":$server_name NOTICE alice :OVERNETAUTH DELEGATE",
       'fresh IRC service acknowledges restored relay-backed delegation';

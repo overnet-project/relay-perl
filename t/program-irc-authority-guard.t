@@ -8,15 +8,17 @@ use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 require Overnet::Program::IRC::Server;
 
 {
-  package Local::AuthoritativeEmptyReadServer; ## no critic (Modules::RequireFilenameMatchesPackage)
+
+  package Local::AuthoritativeEmptyReadServer;
   our @ISA = ('Overnet::Program::IRC::Server');
 
   sub _read_authoritative_nip29_events {
     my ($self, $channel, %args) = @_;
-    push @{$self->{authoritative_read_calls}}, {
+    push @{$self->{authoritative_read_calls}},
+      {
       channel => $channel,
-      args    => { %args },
-    };
+      args    => {%args},
+      };
     return [];
   }
 
@@ -41,7 +43,8 @@ subtest 'known hosted channels are not silently recreated from empty authoritati
         group_id     => 'overnet',
       },
     },
-  }, 'Local::AuthoritativeEmptyReadServer';
+    },
+    'Local::AuthoritativeEmptyReadServer';
 
   my $result = $server->_authoritative_join_admission_for_client(
     '#overnet',
@@ -53,9 +56,9 @@ subtest 'known hosted channels are not silently recreated from empty authoritati
     },
   );
 
-  ok !$result->{allowed}, 'empty authoritative reads do not silently allow JOIN for a known hosted channel';
+  ok !$result->{allowed},        'empty authoritative reads do not silently allow JOIN for a known hosted channel';
   ok !$result->{create_channel}, 'empty authoritative reads do not silently widen into channel creation';
-  ok !$result->{auth_required}, 'the known hosted-channel denial is not treated as missing auth';
+  ok !$result->{auth_required},  'the known hosted-channel denial is not treated as missing auth';
   ok $server->{authoritative_read_calls}[0]{args}{force},
     'uncached relay admission uses a one-shot refresh query before subscribing';
 };
@@ -75,7 +78,8 @@ subtest 'local transient channel state does not make a hosted channel authoritat
         channel_name => '#Fresh',
       },
     },
-  }, 'Local::AuthoritativeEmptyReadServer';
+    },
+    'Local::AuthoritativeEmptyReadServer';
 
   my $result = $server->_authoritative_join_admission_for_client(
     '#Fresh',
@@ -87,7 +91,7 @@ subtest 'local transient channel state does not make a hosted channel authoritat
     },
   );
 
-  ok $result->{allowed}, 'transient local channel state does not block authoritative channel creation';
+  ok $result->{allowed},        'transient local channel state does not block authoritative channel creation';
   ok $result->{create_channel}, 'transient local channel state still allows authoritative creation';
   ok !$result->{auth_required}, 'authenticated creation is not treated as missing auth';
 };

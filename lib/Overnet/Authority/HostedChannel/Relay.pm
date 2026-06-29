@@ -2,8 +2,10 @@ package Overnet::Authority::HostedChannel::Relay;
 
 use strictures 2;
 
+use Carp     qw(croak);
 use Exporter qw(import);
 
+our $VERSION   = '0.001';
 our @EXPORT_OK = qw(build_authoritative_relay);
 
 use Net::Nostr::Group;
@@ -11,17 +13,33 @@ use Net::Nostr::Relay;
 use Overnet::Authority::HostedChannel ();
 use Overnet::Relay::Store::File;
 
+my %AUTHORITATIVE_CONTROL_KIND = map { $_ => 1 } (9_000,  9_001,  9_002,  9_009, 9_021, 9_022);
+my %GROUP_EVENT_KIND           = map { $_ => 1 } (39_000, 39_001, 39_002, 9_000, 9_001, 9_002, 9_009, 9_021, 9_022);
+my %EVENT_SORT_RANK            = (
+  39_000 => 0,
+  39_001 => 1,
+  39_002 => 2,
+  39_003 => 3,
+  9_002  => 4,
+  9_009  => 5,
+  9_021  => 6,
+  9_022  => 7,
+  9_000  => 8,
+  9_001  => 9,
+);
+
 sub build_authoritative_relay {
   my (%args) = @_;
 
-  die "relay_url is required\n"
-    unless defined $args{relay_url} && !ref($args{relay_url}) && length($args{relay_url});
-  die "grant_kind must be a positive integer\n"
-    unless defined $args{grant_kind}
-      && !ref($args{grant_kind})
-      && $args{grant_kind} =~ /\A[1-9]\d*\z/mx;
-  die "store_file must be a non-empty string\n"
-    if defined $args{store_file} && (ref($args{store_file}) || $args{store_file} eq '');
+  if (!(defined $args{relay_url} && !ref($args{relay_url}) && length($args{relay_url}))) {
+    croak 'relay_url is required';
+  }
+  if (!(defined $args{grant_kind} && !ref($args{grant_kind}) && $args{grant_kind} =~ /\A[1-9]\d*\z/mxs)) {
+    croak 'grant_kind must be a positive integer';
+  }
+  if (defined $args{store_file} && (ref($args{store_file}) || $args{store_file} eq q{})) {
+    croak 'store_file must be a non-empty string';
+  }
 
   my $relay;
   my %relay_args = (
@@ -40,9 +58,7 @@ sub build_authoritative_relay {
   if ($args{store}) {
     $relay_args{store} = $args{store};
   } elsif (defined $args{store_file}) {
-    $relay_args{store} = Overnet::Relay::Store::File->new(
-      path => $args{store_file},
-    );
+    $relay_args{store} = Overnet::Relay::Store::File->new(path => $args{store_file},);
   }
 
   $relay = Net::Nostr::Relay->new(%relay_args);
@@ -51,324 +67,546 @@ sub build_authoritative_relay {
 
 sub _authorize_event {
   my (%args) = @_;
-  my $relay = $args{relay};
-  my $event = $args{event};
+  my $context = _authorization_context(%args);
 
-  my $kind = $event->kind;
-  return (1, '') unless $kind == 9000
-    || $kind == 9001
-    || $kind == 9002
-    || $kind == 9009
-    || $kind == 9021
-    || $kind == 9022;
-
-  my %tags = _first_tag_values($event->tags);
-  my $group_id = $tags{h};
-  return (0, 'invalid: authoritative NIP-29 control events require one h tag')
-    unless defined $group_id && !ref($group_id) && length($group_id);
-
-  my $actor_pubkey = $tags{overnet_actor};
-  return (0, 'unauthorized: missing overnet_actor tag')
-    unless defined $actor_pubkey && $actor_pubkey =~ /\A[0-9a-f]{64}\z/mx;
-
-  my $authority_id = $tags{overnet_authority};
-  return (0, 'unauthorized: missing overnet_authority tag')
-    unless defined $authority_id && $authority_id =~ /\A[0-9a-f]{64}\z/mx;
-
-  return (0, 'unauthorized: authority signer must differ from the effective actor')
-    if $event->pubkey eq $actor_pubkey;
+  if (!$context->{control_event}) {
+    return _accept();
+  }
+  if (defined $context->{rejection}) {
+    return _reject($context->{rejection});
+  }
 
   my $state = _derive_group_state(
-    relay    => $relay,
-    group_id => $group_id,
+    relay    => $context->{relay},
+    group_id => $context->{group_id},
   );
 
   if ($state->{tombstoned}) {
-    if ($kind == 9002) {
-      my %metadata = _metadata_from_tags($event->tags);
-      if (!$metadata{tombstoned}) {
-        my $member = $state->{members}{$actor_pubkey};
-        return (0, 'unauthorized: actor is not a retained channel operator')
-          unless $member && grep { $_ eq 'irc.operator' } @{$member->{roles} || []};
-        return (1, '');
-      }
-    }
-    return (0, 'unauthorized: group is tombstoned');
+    return _authorize_tombstoned_event($context, $state);
   }
-
-  if ($kind == 9021) {
+  if ($context->{kind} == 9_021) {
     return _authorize_join_request(
-      event      => $event,
-      actor      => $actor_pubkey,
-      state      => $state,
+      event => $context->{event},
+      actor => $context->{actor_pubkey},
+      state => $state,
     );
   }
-
-  if ($kind == 9022) {
-    return (1, '')
-      if $state->{members}{$actor_pubkey}
-        || _actor_membership_state(
-          relay    => $relay,
-          group_id => $group_id,
-          actor    => $actor_pubkey,
-        );
-    return (0, 'unauthorized: actor is not a group member');
+  if ($context->{kind} == 9_022) {
+    return _authorize_leave_request($context, $state);
+  }
+  if (_is_initial_operator_grant($context, $state)) {
+    return _accept();
   }
 
-  if ($kind == 9000) {
-    my ($target_pubkey, $roles) = _target_and_roles_from_put_user($event->tags);
-    if (!keys %{$state->{members} || {}}
-        && defined $target_pubkey
-        && $target_pubkey eq $actor_pubkey
-        && grep { $_ eq 'irc.operator' } @{$roles || []}) {
-      return (1, '');
+  return _authorize_operator_action($context, $state);
+}
+
+sub _authorization_context {
+  my (%args) = @_;
+  my $event  = $args{event};
+  my $kind   = $event->kind;
+
+  if (!$AUTHORITATIVE_CONTROL_KIND{$kind}) {
+    return {control_event => 0};
+  }
+
+  my %tags     = _first_tag_values($event->tags);
+  my $group_id = $tags{h};
+  if (!(defined $group_id && !ref($group_id) && length($group_id))) {
+    return _rejected_context('invalid: authoritative NIP-29 control events require one h tag');
+  }
+
+  my $actor_pubkey = $tags{overnet_actor};
+  if (!_valid_pubkey($actor_pubkey)) {
+    return _rejected_context('unauthorized: missing overnet_actor tag');
+  }
+
+  my $authority_id = $tags{overnet_authority};
+  if (!_valid_pubkey($authority_id)) {
+    return _rejected_context('unauthorized: missing overnet_authority tag');
+  }
+
+  if ($event->pubkey eq $actor_pubkey) {
+    return _rejected_context('unauthorized: authority signer must differ from the effective actor');
+  }
+
+  return {
+    control_event => 1,
+    relay         => $args{relay},
+    event         => $event,
+    kind          => $kind,
+    group_id      => $group_id,
+    actor_pubkey  => $actor_pubkey,
+    authority_id  => $authority_id,
+  };
+}
+
+sub _rejected_context {
+  my ($reason) = @_;
+  return {
+    control_event => 1,
+    rejection     => $reason,
+  };
+}
+
+sub _accept {
+  return (1, q{});
+}
+
+sub _reject {
+  my ($reason) = @_;
+  return (0, $reason);
+}
+
+sub _authorize_tombstoned_event {
+  my ($context, $state) = @_;
+  if ($context->{kind} == 9_002) {
+    my %metadata = _metadata_from_tags($context->{event}->tags);
+    if (!$metadata{tombstoned}) {
+      if (_actor_has_operator_role($state, $context->{actor_pubkey})) {
+        return _accept();
+      }
+      return _reject('unauthorized: actor is not a retained channel operator');
     }
   }
 
-  my $member = $state->{members}{$actor_pubkey};
-  return (0, 'unauthorized: actor is not a channel operator')
-    unless $member && grep { $_ eq 'irc.operator' } @{$member->{roles} || []};
+  return _reject('unauthorized: group is tombstoned');
+}
 
-  return (1, '');
+sub _authorize_leave_request {
+  my ($context, $state) = @_;
+  if (
+    $state->{members}{$context->{actor_pubkey}}
+    || _actor_membership_state(
+      relay    => $context->{relay},
+      group_id => $context->{group_id},
+      actor    => $context->{actor_pubkey},
+    )
+  ) {
+    return _accept();
+  }
+
+  return _reject('unauthorized: actor is not a group member');
+}
+
+sub _is_initial_operator_grant {
+  my ($context, $state) = @_;
+  if ($context->{kind} != 9_000) {
+    return 0;
+  }
+  if (keys %{$state->{members} || {}}) {
+    return 0;
+  }
+
+  my ($target_pubkey, $roles) = _target_and_roles_from_put_user($context->{event}->tags);
+  return
+       defined $target_pubkey
+    && $target_pubkey eq $context->{actor_pubkey}
+    && _has_role($roles, 'irc.operator');
+}
+
+sub _authorize_operator_action {
+  my ($context, $state) = @_;
+  if (_actor_has_operator_role($state, $context->{actor_pubkey})) {
+    return _accept();
+  }
+
+  return _reject('unauthorized: actor is not a channel operator');
+}
+
+sub _actor_has_operator_role {
+  my ($state, $actor_pubkey) = @_;
+  my $member = $state->{members}{$actor_pubkey};
+  return $member && _has_role($member->{roles}, 'irc.operator') ? 1 : 0;
+}
+
+sub _has_role {
+  my ($roles, $role) = @_;
+  for my $candidate (@{$roles || []}) {
+    if ($candidate eq $role) {
+      return 1;
+    }
+  }
+
+  return 0;
 }
 
 sub _authorize_join_request {
   my (%args) = @_;
-  my $event = $args{event};
-  my $actor = $args{actor};
-  my $state = $args{state};
+  my $event  = $args{event};
+  my $actor  = $args{actor};
+  my $state  = $args{state};
 
-  return (1, '')
-    if $state->{members}{$actor};
+  if ($state->{members}{$actor}) {
+    return _accept();
+  }
 
   my %tags = _first_tag_values($event->tags);
   if (_irc_mask_is_banned($state->{ban_masks}, $tags{overnet_irc_mask})) {
-    return (0, 'unauthorized: actor is banned from the group');
+    return _reject('unauthorized: actor is banned from the group');
   }
 
-  return (1, '')
-    unless $state->{closed};
+  if (!$state->{closed}) {
+    return _accept();
+  }
 
   my $code = $tags{code};
-  return (0, 'unauthorized: closed groups require an invite code')
-    unless defined $code && length($code);
-  return (0, 'unauthorized: invite code is not active')
-    unless exists $state->{invites}{$code};
+  if (!(defined $code && length($code))) {
+    return _reject('unauthorized: closed groups require an invite code');
+  }
+  if (!exists $state->{invites}{$code}) {
+    return _reject('unauthorized: invite code is not active');
+  }
 
   my $invite = $state->{invites}{$code};
   if (defined $invite->{target_pubkey} && $invite->{target_pubkey} ne $actor) {
-    return (0, 'unauthorized: invite code targets a different pubkey');
+    return _reject('unauthorized: invite code targets a different pubkey');
   }
 
-  return (1, '');
+  return _accept();
 }
 
 sub _derive_group_state {
   my (%args) = @_;
-  my $relay = $args{relay};
-  my $group_id = $args{group_id};
+  my $state = _new_group_state();
 
-  my %members;
-  my %invites;
-  my $closed = 0;
-  my @ban_masks;
-  my $tombstoned = 0;
-
-  for my $event (_group_events($relay, $group_id)) {
-    my $kind = $event->kind;
-
-    if ($kind == 39000 || $kind == 9002) {
-      my %metadata = _metadata_from_tags($event->tags);
-      $closed = $metadata{closed} ? 1 : 0;
-      @ban_masks = @{$metadata{ban_masks} || []};
-      $tombstoned = $metadata{tombstoned} ? 1 : 0;
-      %invites = ()
-        if $tombstoned;
-      next;
-    }
-
-    if ($kind == 39001) {
-      for my $tag (@{$event->tags || []}) {
-        next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
-        my $pubkey = $tag->[1];
-        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
-        $members{$pubkey} = {
-          pubkey => $pubkey,
-          roles  => [ @{$tag}[2 .. $#{$tag}] ],
-        };
-      }
-      next;
-    }
-
-    if ($kind == 39002) {
-      for my $tag (@{$event->tags || []}) {
-        next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
-        my $pubkey = $tag->[1];
-        next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
-        $members{$pubkey} ||= {
-          pubkey => $pubkey,
-          roles  => [],
-        };
-      }
-      next;
-    }
-
-    if ($kind == 9000) {
-      my ($target_pubkey, $roles) = _target_and_roles_from_put_user($event->tags);
-      next unless defined $target_pubkey;
-      $members{$target_pubkey} = {
-        pubkey => $target_pubkey,
-        roles  => $roles,
-      };
-      next;
-    }
-
-    if ($kind == 9001) {
-      my $target_pubkey = _target_pubkey_from_tags($event->tags);
-      delete $members{$target_pubkey}
-        if defined $target_pubkey;
-      next;
-    }
-
-    if ($kind == 9009) {
-      my ($code, $target_pubkey) = _invite_from_tags($event->tags);
-      next unless defined $code;
-      $invites{$code} = {
-        code => $code,
-        (defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),
-      };
-      next;
-    }
-
-    if ($kind == 9021) {
-      my %tags = _first_tag_values($event->tags);
-      my $joiner = $tags{overnet_actor};
-      next unless defined $joiner && $joiner =~ /\A[0-9a-f]{64}\z/mx;
-
-      if (!$closed) {
-        $members{$joiner} ||= {
-          pubkey => $joiner,
-          roles  => [],
-        };
-        next;
-      }
-
-      my $code = $tags{code};
-      next unless defined $code && exists $invites{$code};
-
-      my $invite = $invites{$code};
-      next if defined $invite->{target_pubkey}
-        && $invite->{target_pubkey} ne $joiner;
-
-      $members{$joiner} ||= {
-        pubkey => $joiner,
-        roles  => [],
-      };
-      delete $invites{$code};
-      next;
-    }
-
-    if ($kind == 9022) {
-      my %tags = _first_tag_values($event->tags);
-      my $leaver = $tags{overnet_actor};
-      next unless defined $leaver && $leaver =~ /\A[0-9a-f]{64}\z/mx;
-      delete $members{$leaver};
-      next;
-    }
+  for my $event (_group_events($args{relay}, $args{group_id})) {
+    _apply_group_state_event($state, $event);
   }
 
   return {
-    closed     => $closed,
-    ban_masks  => [ @ban_masks ],
-    members    => \%members,
-    invites    => \%invites,
-    tombstoned => $tombstoned ? 1 : 0,
+    closed     => $state->{closed},
+    ban_masks  => [@{$state->{ban_masks}}],
+    members    => $state->{members},
+    invites    => $state->{invites},
+    tombstoned => $state->{tombstoned} ? 1 : 0,
   };
+}
+
+sub _new_group_state {
+  return {
+    closed     => 0,
+    ban_masks  => [],
+    members    => {},
+    invites    => {},
+    tombstoned => 0,
+  };
+}
+
+sub _apply_group_state_event {
+  my ($state, $event) = @_;
+  my $kind = $event->kind;
+
+  if ($kind == 39_000 || $kind == 9_002) {
+    return _apply_group_metadata_event($state, $event);
+  }
+  if ($kind == 39_001) {
+    return _apply_operator_snapshot_event($state, $event);
+  }
+  if ($kind == 39_002) {
+    return _apply_member_snapshot_event($state, $event);
+  }
+  if ($kind == 9_000) {
+    return _apply_put_user_event($state, $event);
+  }
+  if ($kind == 9_001) {
+    return _apply_remove_user_event($state, $event);
+  }
+  if ($kind == 9_009) {
+    return _apply_invite_event($state, $event);
+  }
+  if ($kind == 9_021) {
+    return _apply_join_event($state, $event);
+  }
+  if ($kind == 9_022) {
+    return _apply_leave_event($state, $event);
+  }
+
+  return 1;
+}
+
+sub _apply_group_metadata_event {
+  my ($state, $event) = @_;
+  my %metadata = _metadata_from_tags($event->tags);
+  $state->{closed}     = $metadata{closed} ? 1 : 0;
+  $state->{ban_masks}  = [@{$metadata{ban_masks} || []}];
+  $state->{tombstoned} = $metadata{tombstoned} ? 1 : 0;
+  if ($state->{tombstoned}) {
+    $state->{invites} = {};
+  }
+
+  return 1;
+}
+
+sub _apply_operator_snapshot_event {
+  my ($state, $event) = @_;
+  for my $tag (@{$event->tags || []}) {
+    my ($pubkey, $roles) = _member_tag_pubkey_and_roles($tag);
+    if (!defined $pubkey) {
+      next;
+    }
+    $state->{members}{$pubkey} = {
+      pubkey => $pubkey,
+      roles  => $roles,
+    };
+  }
+
+  return 1;
+}
+
+sub _apply_member_snapshot_event {
+  my ($state, $event) = @_;
+  for my $tag (@{$event->tags || []}) {
+    my ($pubkey) = _member_tag_pubkey_and_roles($tag);
+    if (!defined $pubkey) {
+      next;
+    }
+    if (!exists $state->{members}{$pubkey}) {
+      $state->{members}{$pubkey} = {
+        pubkey => $pubkey,
+        roles  => [],
+      };
+    }
+  }
+
+  return 1;
+}
+
+sub _apply_put_user_event {
+  my ($state,         $event) = @_;
+  my ($target_pubkey, $roles) = _target_and_roles_from_put_user($event->tags);
+  if (defined $target_pubkey) {
+    $state->{members}{$target_pubkey} = {
+      pubkey => $target_pubkey,
+      roles  => $roles,
+    };
+  }
+
+  return 1;
+}
+
+sub _apply_remove_user_event {
+  my ($state, $event) = @_;
+  my $target_pubkey = _target_pubkey_from_tags($event->tags);
+  if (defined $target_pubkey) {
+    delete $state->{members}{$target_pubkey};
+  }
+
+  return 1;
+}
+
+sub _apply_invite_event {
+  my ($state, $event)         = @_;
+  my ($code,  $target_pubkey) = _invite_from_tags($event->tags);
+  if (defined $code) {
+    $state->{invites}{$code} = {
+      code => $code,
+      (defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),
+    };
+  }
+
+  return 1;
+}
+
+sub _apply_join_event {
+  my ($state, $event) = @_;
+  my %tags   = _first_tag_values($event->tags);
+  my $joiner = $tags{overnet_actor};
+  if (!_valid_pubkey($joiner)) {
+    return 1;
+  }
+  if (!$state->{closed}) {
+    _add_default_member($state, $joiner);
+    return 1;
+  }
+
+  my $code = $tags{code};
+  if (!(defined $code && exists $state->{invites}{$code})) {
+    return 1;
+  }
+
+  my $invite = $state->{invites}{$code};
+  if (defined $invite->{target_pubkey} && $invite->{target_pubkey} ne $joiner) {
+    return 1;
+  }
+
+  _add_default_member($state, $joiner);
+  delete $state->{invites}{$code};
+  return 1;
+}
+
+sub _apply_leave_event {
+  my ($state, $event) = @_;
+  my %tags   = _first_tag_values($event->tags);
+  my $leaver = $tags{overnet_actor};
+  if (_valid_pubkey($leaver)) {
+    delete $state->{members}{$leaver};
+  }
+
+  return 1;
+}
+
+sub _add_default_member {
+  my ($state, $pubkey) = @_;
+  if (!exists $state->{members}{$pubkey}) {
+    $state->{members}{$pubkey} = {
+      pubkey => $pubkey,
+      roles  => [],
+    };
+  }
+
+  return 1;
+}
+
+sub _member_tag_pubkey_and_roles {
+  my ($tag) = @_;
+  if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || q{}) eq 'p')) {
+    return;
+  }
+  if (!_valid_pubkey($tag->[1])) {
+    return;
+  }
+
+  return ($tag->[1], [@{$tag}[2 .. $#{$tag}]]);
 }
 
 sub _actor_membership_state {
   my (%args) = @_;
-  my $relay = $args{relay};
-  my $group_id = $args{group_id};
-  my $actor = $args{actor};
-  return 0 unless defined $actor && $actor =~ /\A[0-9a-f]{64}\z/mx;
-
-  my $closed = 0;
-  my $member = 0;
-  my %invites;
-  my $tombstoned = 0;
-
-  for my $event (_group_events($relay, $group_id)) {
-    my $kind = $event->kind;
-
-    if ($kind == 39000 || $kind == 9002) {
-      my %metadata = _metadata_from_tags($event->tags);
-      $closed = $metadata{closed} ? 1 : 0;
-      $tombstoned = $metadata{tombstoned} ? 1 : 0;
-      %invites = ()
-        if $tombstoned;
-      next;
-    }
-
-    if ($kind == 39002) {
-      my $member_info = Net::Nostr::Group->members_from_event($event);
-      my %snapshot = map { $_ => 1 } @{$member_info->{members} || []};
-      $member = $snapshot{$actor} ? 1 : 0;
-      next;
-    }
-
-    if ($kind == 9009) {
-      my ($code, $target_pubkey) = _invite_from_tags($event->tags);
-      next unless defined $code;
-      $invites{$code} = {
-        (defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),
-      };
-      next;
-    }
-
-    if ($kind == 9000) {
-      my ($target_pubkey) = _target_and_roles_from_put_user($event->tags);
-      $member = 1
-        if defined $target_pubkey && $target_pubkey eq $actor;
-      next;
-    }
-
-    if ($kind == 9001) {
-      my $target_pubkey = _target_pubkey_from_tags($event->tags);
-      $member = 0
-        if defined $target_pubkey && $target_pubkey eq $actor;
-      next;
-    }
-
-    if ($kind == 9021) {
-      my %tags = _first_tag_values($event->tags);
-      next unless defined $tags{overnet_actor} && $tags{overnet_actor} eq $actor;
-      if (!$closed) {
-        $member = 1;
-        next;
-      }
-
-      my $code = $tags{code};
-      next unless defined $code && exists $invites{$code};
-      my $invite = $invites{$code};
-      next if defined $invite->{target_pubkey}
-        && $invite->{target_pubkey} ne $actor;
-
-      $member = 1;
-      delete $invites{$code};
-      next;
-    }
-
-    if ($kind == 9022) {
-      my %tags = _first_tag_values($event->tags);
-      $member = 0
-        if defined $tags{overnet_actor} && $tags{overnet_actor} eq $actor;
-      next;
-    }
+  if (!_valid_pubkey($args{actor})) {
+    return 0;
   }
 
-  return 0 if $tombstoned;
-  return $member;
+  my $state = {
+    actor      => $args{actor},
+    closed     => 0,
+    member     => 0,
+    invites    => {},
+    tombstoned => 0,
+  };
+
+  for my $event (_group_events($args{relay}, $args{group_id})) {
+    _apply_actor_membership_event($state, $event);
+  }
+
+  if ($state->{tombstoned}) {
+    return 0;
+  }
+  return $state->{member};
+}
+
+sub _apply_actor_membership_event {
+  my ($state, $event) = @_;
+  my $kind = $event->kind;
+
+  if ($kind == 39_000 || $kind == 9_002) {
+    return _apply_actor_metadata_event($state, $event);
+  }
+  if ($kind == 39_002) {
+    return _apply_actor_snapshot_event($state, $event);
+  }
+  if ($kind == 9_009) {
+    return _apply_actor_invite_event($state, $event);
+  }
+  if ($kind == 9_000) {
+    return _apply_actor_put_user_event($state, $event);
+  }
+  if ($kind == 9_001) {
+    return _apply_actor_remove_user_event($state, $event);
+  }
+  if ($kind == 9_021) {
+    return _apply_actor_join_event($state, $event);
+  }
+  if ($kind == 9_022) {
+    return _apply_actor_leave_event($state, $event);
+  }
+
+  return 1;
+}
+
+sub _apply_actor_metadata_event {
+  my ($state, $event) = @_;
+  my %metadata = _metadata_from_tags($event->tags);
+  $state->{closed}     = $metadata{closed}     ? 1 : 0;
+  $state->{tombstoned} = $metadata{tombstoned} ? 1 : 0;
+  if ($state->{tombstoned}) {
+    $state->{invites} = {};
+  }
+
+  return 1;
+}
+
+sub _apply_actor_snapshot_event {
+  my ($state, $event) = @_;
+  my $member_info = Net::Nostr::Group->members_from_event($event);
+  my %snapshot    = map { $_ => 1 } @{$member_info->{members} || []};
+  $state->{member} = $snapshot{$state->{actor}} ? 1 : 0;
+  return 1;
+}
+
+sub _apply_actor_invite_event {
+  my ($state, $event)         = @_;
+  my ($code,  $target_pubkey) = _invite_from_tags($event->tags);
+  if (defined $code) {
+    $state->{invites}{$code} = {(defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),};
+  }
+
+  return 1;
+}
+
+sub _apply_actor_put_user_event {
+  my ($state, $event) = @_;
+  my ($target_pubkey) = _target_and_roles_from_put_user($event->tags);
+  if (defined $target_pubkey && $target_pubkey eq $state->{actor}) {
+    $state->{member} = 1;
+  }
+
+  return 1;
+}
+
+sub _apply_actor_remove_user_event {
+  my ($state, $event) = @_;
+  my $target_pubkey = _target_pubkey_from_tags($event->tags);
+  if (defined $target_pubkey && $target_pubkey eq $state->{actor}) {
+    $state->{member} = 0;
+  }
+
+  return 1;
+}
+
+sub _apply_actor_join_event {
+  my ($state, $event) = @_;
+  my %tags = _first_tag_values($event->tags);
+  if (!(defined $tags{overnet_actor} && $tags{overnet_actor} eq $state->{actor})) {
+    return 1;
+  }
+  if (!$state->{closed}) {
+    $state->{member} = 1;
+    return 1;
+  }
+
+  my $code = $tags{code};
+  if (!(defined $code && exists $state->{invites}{$code})) {
+    return 1;
+  }
+
+  my $invite = $state->{invites}{$code};
+  if (defined $invite->{target_pubkey} && $invite->{target_pubkey} ne $state->{actor}) {
+    return 1;
+  }
+
+  $state->{member} = 1;
+  delete $state->{invites}{$code};
+  return 1;
+}
+
+sub _apply_actor_leave_event {
+  my ($state, $event) = @_;
+  my %tags = _first_tag_values($event->tags);
+  if (defined $tags{overnet_actor} && $tags{overnet_actor} eq $state->{actor}) {
+    $state->{member} = 0;
+  }
+
+  return 1;
 }
 
 sub _group_events {
@@ -376,76 +614,105 @@ sub _group_events {
   my @events;
 
   for my $event (@{$relay->store->all_events || []}) {
-    my $kind = $event->kind;
-    next unless $kind == 39000
-      || $kind == 39001
-      || $kind == 39002
-      || $kind == 9000
-      || $kind == 9001
-      || $kind == 9002
-      || $kind == 9009
-      || $kind == 9021
-      || $kind == 9022;
-
-    my %tags = _first_tag_values($event->tags);
-    next unless (defined $tags{d} && $tags{d} eq $group_id)
-      || (defined $tags{h} && $tags{h} eq $group_id);
-
-    push @events, $event;
+    if (_event_belongs_to_group($event, $group_id)) {
+      push @events, $event;
+    }
   }
 
   my @decorated;
   my $index = 0;
   for my $event (@events) {
-    push @decorated, [ $index++, $event ];
+    push @decorated, [$index, $event];
+    $index++;
   }
 
-  return map { $_->[1] } sort {
-    ($a->[1]->created_at <=> $b->[1]->created_at)
-      || (
-        defined _event_sequence_for_sort($a->[1])
-          && defined _event_sequence_for_sort($b->[1])
-          && ((_event_authority_for_sort($a->[1]) || '') eq (_event_authority_for_sort($b->[1]) || ''))
-            ? (_event_sequence_for_sort($a->[1]) <=> _event_sequence_for_sort($b->[1]))
-            : (_event_sort_rank($a->[1]) <=> _event_sort_rank($b->[1]))
-      )
-      || ($a->[0] <=> $b->[0])
-  } @decorated;
+  return map { $_->[1] } sort { _compare_group_event_pairs($a, $b) } @decorated;
+}
+
+sub _event_belongs_to_group {
+  my ($event, $group_id) = @_;
+  if (!$GROUP_EVENT_KIND{$event->kind}) {
+    return 0;
+  }
+
+  my %tags = _first_tag_values($event->tags);
+  if (defined $tags{d} && $tags{d} eq $group_id) {
+    return 1;
+  }
+  if (defined $tags{h} && $tags{h} eq $group_id) {
+    return 1;
+  }
+
+  return 0;
+}
+
+sub _compare_group_event_pairs {
+  my ($first_pair, $second_pair) = @_;
+  my $created_order = $first_pair->[1]->created_at <=> $second_pair->[1]->created_at;
+  if ($created_order) {
+    return $created_order;
+  }
+
+  my $sequence_order = _compare_event_sequence_for_sort($first_pair->[1], $second_pair->[1]);
+  if (defined $sequence_order) {
+    if (!$sequence_order) {
+      return $first_pair->[0] <=> $second_pair->[0];
+    }
+    return $sequence_order;
+  }
+
+  my $rank_order = _event_sort_rank($first_pair->[1]) <=> _event_sort_rank($second_pair->[1]);
+  if ($rank_order) {
+    return $rank_order;
+  }
+
+  return $first_pair->[0] <=> $second_pair->[0];
+}
+
+sub _compare_event_sequence_for_sort {
+  my ($first_event, $second_event) = @_;
+  my $first_sequence  = _event_sequence_for_sort($first_event);
+  my $second_sequence = _event_sequence_for_sort($second_event);
+  if (!(defined $first_sequence && defined $second_sequence)) {
+    return;
+  }
+
+  my $first_authority  = _event_authority_for_sort($first_event)  || q{};
+  my $second_authority = _event_authority_for_sort($second_event) || q{};
+  if ($first_authority ne $second_authority) {
+    return;
+  }
+
+  return $first_sequence <=> $second_sequence;
 }
 
 sub _event_authority_for_sort {
   my ($event) = @_;
   my %tags = _first_tag_values($event->tags);
-  return $tags{overnet_authority}
-    if defined $tags{overnet_authority}
-      && !ref($tags{overnet_authority})
-      && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx;
+  if ( defined $tags{overnet_authority}
+    && !ref($tags{overnet_authority})
+    && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mxs) {
+    return $tags{overnet_authority};
+  }
   return;
 }
 
 sub _event_sequence_for_sort {
   my ($event) = @_;
   my %tags = _first_tag_values($event->tags);
-  return 0 + $tags{overnet_sequence}
-    if defined $tags{overnet_sequence}
-      && !ref($tags{overnet_sequence})
-      && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx;
+  if ( defined $tags{overnet_sequence}
+    && !ref($tags{overnet_sequence})
+    && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mxs) {
+    return 0 + $tags{overnet_sequence};
+  }
   return;
 }
 
 sub _event_sort_rank {
   my ($event) = @_;
-  my $kind = $event->kind;
-  return 0 if $kind == 39000;
-  return 1 if $kind == 39001;
-  return 2 if $kind == 39002;
-  return 3 if $kind == 39003;
-  return 4 if $kind == 9002;
-  return 5 if $kind == 9009;
-  return 6 if $kind == 9021;
-  return 7 if $kind == 9022;
-  return 8 if $kind == 9000;
-  return 9 if $kind == 9001;
+  if (exists $EVENT_SORT_RANK{$event->kind}) {
+    return $EVENT_SORT_RANK{$event->kind};
+  }
   return 99;
 }
 
@@ -458,36 +725,63 @@ sub _metadata_from_tags {
   );
 
   for my $tag (@{$tags || []}) {
-    next unless ref($tag) eq 'ARRAY' && @{$tag} >= 1;
-    $metadata{closed} = 1 if ($tag->[0] || '') eq 'closed';
-    $metadata{closed} = 0 if ($tag->[0] || '') eq 'open';
-    $metadata{tombstoned} = 1
-      if ($tag->[0] || '') eq 'status'
-        && @{$tag} >= 2
-        && ($tag->[1] || '') eq 'tombstoned';
-    push @{$metadata{ban_masks}}, $tag->[1]
-      if ($tag->[0] || '') eq 'ban' && @{$tag} >= 2;
+    if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 1)) {
+      next;
+    }
+    my $tag_name = $tag->[0] || q{};
+    if ($tag_name eq 'closed') {
+      $metadata{closed} = 1;
+    }
+    if ($tag_name eq 'open') {
+      $metadata{closed} = 0;
+    }
+    if ($tag_name eq 'status' && @{$tag} >= 2 && ($tag->[1] || q{}) eq 'tombstoned') {
+      $metadata{tombstoned} = 1;
+    }
+    if ($tag_name eq 'ban' && @{$tag} >= 2) {
+      push @{$metadata{ban_masks}}, $tag->[1];
+    }
   }
 
-  my %seen;
-  $metadata{ban_masks} = [
-    sort grep {
-      defined($_) && !ref($_) && length($_) && !$seen{$_}++
-    } @{$metadata{ban_masks}}
-  ];
+  $metadata{ban_masks} = _unique_non_empty_strings($metadata{ban_masks});
   return %metadata;
+}
+
+sub _unique_non_empty_strings {
+  my ($values) = @_;
+  my %seen;
+  my @unique;
+  for my $value (@{$values || []}) {
+    if (!(defined $value && !ref($value) && length($value))) {
+      next;
+    }
+    if ($seen{$value}++) {
+      next;
+    }
+    push @unique, $value;
+  }
+
+  return [sort @unique];
 }
 
 sub _irc_mask_is_banned {
   my ($ban_masks, $actor_mask) = @_;
-  return 0 unless defined $actor_mask && !ref($actor_mask) && length($actor_mask);
+  if (!(defined $actor_mask && !ref($actor_mask) && length($actor_mask))) {
+    return 0;
+  }
 
   for my $ban_mask (@{$ban_masks || []}) {
-    next unless defined $ban_mask && !ref($ban_mask) && length($ban_mask);
-    return 1 if Overnet::Authority::HostedChannel::irc_mask_matches(
-      mask  => $ban_mask,
-      value => $actor_mask,
-    );
+    if (!(defined $ban_mask && !ref($ban_mask) && length($ban_mask))) {
+      next;
+    }
+    if (
+      Overnet::Authority::HostedChannel::irc_mask_matches(
+        mask  => $ban_mask,
+        value => $actor_mask,
+      )
+    ) {
+      return 1;
+    }
   }
 
   return 0;
@@ -497,10 +791,14 @@ sub _target_and_roles_from_put_user {
   my ($tags) = @_;
 
   for my $tag (@{$tags || []}) {
-    next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
+    if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || q{}) eq 'p')) {
+      next;
+    }
     my $pubkey = $tag->[1];
-    next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
-    return ($pubkey, [ @{$tag}[2 .. $#{$tag}] ]);
+    if (!_valid_pubkey($pubkey)) {
+      next;
+    }
+    return ($pubkey, [@{$tag}[2 .. $#{$tag}]]);
   }
 
   return (undef, []);
@@ -510,7 +808,9 @@ sub _target_pubkey_from_tags {
   my ($tags) = @_;
 
   for my $tag (@{$tags || []}) {
-    next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
+    if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || q{}) eq 'p')) {
+      next;
+    }
     return $tag->[1];
   }
 
@@ -523,11 +823,16 @@ sub _invite_from_tags {
   my $target_pubkey;
 
   for my $tag (@{$tags || []}) {
-    next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2;
-    $code = $tag->[1]
-      if !defined($code) && ($tag->[0] || '') eq 'code';
-    $target_pubkey = $tag->[1]
-      if !defined($target_pubkey) && ($tag->[0] || '') eq 'p';
+    if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 2)) {
+      next;
+    }
+    my $tag_name = $tag->[0] || q{};
+    if (!defined($code) && $tag_name eq 'code') {
+      $code = $tag->[1];
+    }
+    if (!defined($target_pubkey) && $tag_name eq 'p') {
+      $target_pubkey = $tag->[1];
+    }
   }
 
   return ($code, $target_pubkey);
@@ -538,12 +843,78 @@ sub _first_tag_values {
   my %values;
 
   for my $tag (@{$tags || []}) {
-    next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2;
-    next if exists $values{$tag->[0]};
+    if (!(ref($tag) eq 'ARRAY' && @{$tag} >= 2)) {
+      next;
+    }
+    if (exists $values{$tag->[0]}) {
+      next;
+    }
     $values{$tag->[0]} = $tag->[1];
   }
 
   return %values;
 }
 
+sub _valid_pubkey {
+  my ($pubkey) = @_;
+  return defined $pubkey && !ref($pubkey) && $pubkey =~ /\A[0-9a-f]{64}\z/mxs ? 1 : 0;
+}
+
 1;
+
+=head1 NAME
+
+Overnet::Authority::HostedChannel::Relay - Authoritative hosted-channel relay builder
+
+=head1 VERSION
+
+Version 0.001.
+
+=head1 SYNOPSIS
+
+  my $relay = build_authoritative_relay(
+    relay_url  => 'ws://127.0.0.1:7777',
+    grant_kind => 30000,
+  );
+
+=head1 DESCRIPTION
+
+Builds a relay with NIP-29 hosted-channel authorization rules for Overnet IRC
+authority operation.
+
+=head1 SUBROUTINES/METHODS
+
+=head2 build_authoritative_relay
+
+Creates a relay configured with hosted-channel authorization hooks.
+
+=head1 DIAGNOSTICS
+
+Invalid constructor arguments are reported with C<croak>. Unauthorized events
+return Nostr relay rejection reasons.
+
+=head1 CONFIGURATION AND ENVIRONMENT
+
+The caller supplies the relay URL, grant kind, and optional store.
+
+=head1 DEPENDENCIES
+
+Requires L<Net::Nostr::Group>, L<Net::Nostr::Relay>, and Overnet relay modules.
+
+=head1 INCOMPATIBILITIES
+
+None known.
+
+=head1 BUGS AND LIMITATIONS
+
+Report issues at L<https://github.com/overnet-project/relay-perl/issues>.
+
+=head1 AUTHOR
+
+Nicholas B. Hubbard C<< <nicholashubbard@posteo.net> >>
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is distributed under the GNU General Public License, version 3.
+
+=cut

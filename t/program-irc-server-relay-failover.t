@@ -7,10 +7,10 @@ use File::Temp qw(tempdir);
 use FindBin;
 use IO::Select;
 use IO::Socket::INET;
-use IPC::Open3 qw(open3);
+use IPC::Open3   qw(open3);
 use MIME::Base64 qw(encode_base64);
-use POSIX qw(WNOHANG);
-use Symbol qw(gensym);
+use POSIX        qw(WNOHANG);
+use Symbol       qw(gensym);
 use Test::More;
 use Time::HiRes qw(sleep time);
 
@@ -24,7 +24,7 @@ use Overnet::Program::Runtime;
 use Overnet::Relay::Sync;
 
 my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
-my $irc_lib = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
+my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 
 sub _free_port {
@@ -44,17 +44,14 @@ sub _free_port {
 sub _spawn_authoritative_nip29_relay {
   my (%args) = @_;
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    $^X,
-    $authoritative_relay_script,
-    '--host', '127.0.0.1',
-    '--port', $args{port},
-    '--relay-url', $args{relay_url},
-    '--grant-kind', 14142,
-    (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
+  my $pid    = open3(
+    my $stdin,                   my $stdout,
+    $stderr,                     $^X,
+    $authoritative_relay_script, '--host',
+    '127.0.0.1',                 '--port',
+    $args{port},                 '--relay-url',
+    $args{relay_url},            '--grant-kind',
+    14142, (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
   );
 
   close $stdin;
@@ -107,20 +104,24 @@ sub _wait_for_authoritative_nip29_relay_ready {
 }
 
 sub _publish_nostr_event_to_relay {
-  my (%args) = @_;
-  my $client = Net::Nostr::Client->new;
-  my $cv = AnyEvent->condvar;
-  my $wire = Net::Nostr::Event->from_wire($args{event});
+  my (%args)   = @_;
+  my $client   = Net::Nostr::Client->new;
+  my $cv       = AnyEvent->condvar;
+  my $wire     = Net::Nostr::Event->from_wire($args{event});
   my $event_id = $wire->id;
 
-  $client->on(ok => sub {
-    my ($current_id, $accepted, $message) = @_;
-    return unless $current_id eq $event_id;
-    $cv->send({
-      accepted => $accepted ? 1 : 0,
-      message  => $message,
-    });
-  });
+  $client->on(
+    ok => sub {
+      my ($current_id, $accepted, $message) = @_;
+      return unless $current_id eq $event_id;
+      $cv->send(
+        {
+          accepted => $accepted ? 1 : 0,
+          message  => $message,
+        }
+      );
+    }
+  );
 
   $client->connect($args{relay_url});
   $client->publish($wire);
@@ -131,14 +132,12 @@ sub _publish_nostr_event_to_relay {
 
 sub _sync_authoritative_events {
   my (%args) = @_;
-  my $sync = Overnet::Relay::Sync->new(
-    local_url => $args{local_url},
-  );
+  my $sync = Overnet::Relay::Sync->new(local_url => $args{local_url},);
 
   return $sync->sync_once(
-    remote_url       => $args{remote_url},
-    subscription_id  => $args{subscription_id},
-    filter           => Net::Nostr::Filter->new(
+    remote_url      => $args{remote_url},
+    subscription_id => $args{subscription_id},
+    filter          => Net::Nostr::Filter->new(
       kinds => [39000, 39001, 39002, 39003, 9000, 9001, 9002, 9009, 9021, 9022],
     ),
   );
@@ -152,7 +151,7 @@ sub _wait_for_ready_details {
     condition  => sub {
       my ($current_host) = @_;
       for my $notification (@{$current_host->observed_notifications}) {
-        next unless ($notification->{method} || '') eq 'program.health';
+        next unless ($notification->{method}         || '') eq 'program.health';
         next unless ($notification->{params}{status} || '') eq 'ready';
         next unless ref($notification->{params}{details}) eq 'HASH';
         return 1 if defined $notification->{params}{details}{listen_port};
@@ -163,7 +162,7 @@ sub _wait_for_ready_details {
   return unless $ready;
 
   for my $notification (@{$host->observed_notifications}) {
-    next unless ($notification->{method} || '') eq 'program.health';
+    next unless ($notification->{method}         || '') eq 'program.health';
     next unless ($notification->{params}{status} || '') eq 'ready';
     next unless ref($notification->{params}{details}) eq 'HASH';
     return $notification->{params}{details};
@@ -195,7 +194,7 @@ sub _read_client_line {
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
-    my @ready = $selector->can_read($timeout_ms / 1000);
+    my @ready    = $selector->can_read($timeout_ms / 1000);
     die "Timed out waiting for IRC client line\n"
       unless @ready;
 
@@ -216,7 +215,7 @@ sub _read_client_line_optional {
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
-    my @ready = $selector->can_read($timeout_ms / 1000);
+    my @ready    = $selector->can_read($timeout_ms / 1000);
     return unless @ready;
 
     my $bytes = sysread($client->{socket}, my $chunk, 4096);
@@ -235,7 +234,7 @@ sub _write_client_line {
   my ($client, $line) = @_;
 
   my $payload = $line . "\r\n";
-  my $offset = 0;
+  my $offset  = 0;
   while ($offset < length $payload) {
     my $written = syswrite($client->{socket}, $payload, length($payload) - $offset, $offset);
     die "Failed to write fake IRC client line: $!\n"
@@ -252,21 +251,26 @@ sub _assert_registration_prelude {
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
-  ], [
+    ],
+    [
     sprintf(':%s 001 %s :Welcome to Overnet IRC', $args{server_name}, $args{nick}),
-    sprintf(':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server', $args{server_name}, $args{nick}, $args{network}),
+    sprintf(
+      ':%s 005 %s CASEMAPPING=rfc1459 CHANTYPES=#& NETWORK=%s :are supported by this server',
+      $args{server_name}, $args{nick}, $args{network}
+    ),
     sprintf(':%s 422 %s :MOTD File is missing', $args{server_name}, $args{nick}),
-  ], "$args{nick} receives the minimal registration prelude";
+    ],
+    "$args{nick} receives the minimal registration prelude";
   return;
 }
 
 sub _pump_hosts_until {
-  my (%args) = @_;
-  my $hosts = $args{hosts} || [];
-  my $timeout_ms = $args{timeout_ms} || 1_000;
+  my (%args)          = @_;
+  my $hosts           = $args{hosts}           || [];
+  my $timeout_ms      = $args{timeout_ms}      || 1_000;
   my $pump_timeout_ms = $args{pump_timeout_ms} || 50;
-  my $condition = $args{condition} || sub { 0 };
-  my $deadline = time() + ($timeout_ms / 1000);
+  my $condition       = $args{condition}       || sub {0};
+  my $deadline        = time() + ($timeout_ms / 1000);
 
   while (time() < $deadline) {
     for my $host (@{$hosts}) {
@@ -282,7 +286,7 @@ sub _pump_hosts_until {
 sub _pump_hosts_until_client_lines {
   my (%args) = @_;
   my $client = $args{client} || return;
-  my $count = $args{count} || 1;
+  my $count  = $args{count}  || 1;
   my @lines;
 
   my $ok = _pump_hosts_until(
@@ -314,10 +318,7 @@ sub _build_authoritative_auth_payload {
     kind       => 22242,
     created_at => 1_744_301_000,
     content    => '',
-    tags       => [
-      [ 'relay', $args{scope} ],
-      [ 'challenge', $args{challenge} ],
-    ],
+    tags       => [['relay', $args{scope}], ['challenge', $args{challenge}],],
   );
   return encode_base64(JSON::encode_json($event->to_hash), '');
 }
@@ -329,12 +330,12 @@ sub _build_authoritative_delegate_payload {
     created_at => 1_744_301_100,
     content    => '',
     tags       => [
-      [ 'relay', $args{relay_url} ],
-      [ 'server', $args{scope} ],
-      [ 'delegate', $args{delegate_pubkey} ],
-      [ 'session', $args{session_id} ],
-      [ 'expires_at', $args{expires_at} ],
-      (defined($args{nick}) ? ([ 'nick', $args{nick} ]) : ()),
+      ['relay',      $args{relay_url}],
+      ['server',     $args{scope}],
+      ['delegate',   $args{delegate_pubkey}],
+      ['session',    $args{session_id}],
+      ['expires_at', $args{expires_at}],
+      (defined($args{nick}) ? (['nick', $args{nick}]) : ()),
     ],
   );
   return encode_base64(JSON::encode_json($event->to_hash), '');
@@ -343,11 +344,10 @@ sub _build_authoritative_delegate_payload {
 sub _authenticate_and_delegate {
   my (%args) = @_;
   my $client = $args{client};
-  my $host = $args{host};
+  my $host   = $args{host};
 
   _write_client_line($client, 'OVERNETAUTH CHALLENGE');
-  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0,
-    "$args{nick} pumps the auth challenge request";
+  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0, "$args{nick} pumps the auth challenge request";
   my $challenge_line = _read_client_line($client, 1_000);
   like $challenge_line,
     qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ CHALLENGE\ [0-9a-f]{64}\z/mx,
@@ -355,41 +355,48 @@ sub _authenticate_and_delegate {
   $challenge_line =~ /([0-9a-f]{64})\z/mx;
   my $challenge = $1;
 
-  _write_client_line($client, 'OVERNETAUTH AUTH ' . _build_authoritative_auth_payload(
-    key       => $args{key},
-    challenge => $challenge,
-    scope     => _authoritative_auth_scope(
-      server_name => $args{server_name},
-      network     => $args{network},
-    ),
-  ));
-  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0,
-    "$args{nick} pumps the auth response";
+  _write_client_line(
+    $client,
+    'OVERNETAUTH AUTH '
+      . _build_authoritative_auth_payload(
+      key       => $args{key},
+      challenge => $challenge,
+      scope     => _authoritative_auth_scope(
+        server_name => $args{server_name},
+        network     => $args{network},
+      ),
+      )
+  );
+  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0, "$args{nick} pumps the auth response";
   is _read_client_line($client, 1_000),
     ":$args{server_name} NOTICE $args{nick} :OVERNETAUTH AUTH " . $args{key}->pubkey_hex,
     "$args{nick} authenticates the authoritative pubkey";
 
   _write_client_line($client, 'OVERNETAUTH DELEGATE');
-  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0,
-    "$args{nick} pumps the delegation parameter request";
+  ok $host->pump(timeout_ms => $args{pump_timeout_ms}) >= 0, "$args{nick} pumps the delegation parameter request";
   my $delegate_line = _read_client_line($client, 3_000);
   like $delegate_line,
-    qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx,
+qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx,
     "$args{nick} receives relay-backed delegation parameters";
-  my ($delegate_pubkey, $session_id, $expires_at) = $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx;
+  my ($delegate_pubkey, $session_id, $expires_at) =
+    $delegate_line =~ /([0-9a-f]{64})\ ([0-9a-f]{64})\ \Q$args{relay_url}\E\ (\d+)\z/mx;
 
-  _write_client_line($client, 'OVERNETAUTH DELEGATE ' . _build_authoritative_delegate_payload(
-    key             => $args{key},
-    relay_url       => $args{relay_url},
-    scope           => _authoritative_auth_scope(
-      server_name => $args{server_name},
-      network     => $args{network},
-    ),
-    delegate_pubkey => $delegate_pubkey,
-    session_id      => $session_id,
-    expires_at      => $expires_at,
-    nick            => $args{nick},
-  ));
+  _write_client_line(
+    $client,
+    'OVERNETAUTH DELEGATE '
+      . _build_authoritative_delegate_payload(
+      key       => $args{key},
+      relay_url => $args{relay_url},
+      scope     => _authoritative_auth_scope(
+        server_name => $args{server_name},
+        network     => $args{network},
+      ),
+      delegate_pubkey => $delegate_pubkey,
+      session_id      => $session_id,
+      expires_at      => $expires_at,
+      nick            => $args{nick},
+      )
+  );
 
   my $delegate_ack = _pump_hosts_until_client_lines(
     hosts           => [$host],
@@ -405,23 +412,24 @@ sub _authenticate_and_delegate {
   return;
 }
 
-subtest 'IRC server recovers authoritative state from a second live relay without widening or duplicating bootstrap' => sub {
-  my $network = 'irc.authority.relay.failover.test';
-  my $channel = '#ops';
-  my $group_host = 'groups.example.test';
-  my $group_id = 'ops';
-  my $relay_host_pump_ms = 200;
+subtest 'IRC server recovers authoritative state from a second live relay without widening or duplicating bootstrap' =>
+  sub {
+  my $network                      = 'irc.authority.relay.failover.test';
+  my $channel                      = '#ops';
+  my $group_host                   = 'groups.example.test';
+  my $group_id                     = 'ops';
+  my $relay_host_pump_ms           = 200;
   my $relay_propagation_timeout_ms = 5_000;
-  my $relay_a_port = _free_port();
-  my $relay_b_port = _free_port();
-  my $relay_a_url = "ws://127.0.0.1:$relay_a_port";
-  my $relay_b_url = "ws://127.0.0.1:$relay_b_port";
-  my $server_name = 'overnet-failover.irc.local';
-  my $alice_key = Net::Nostr::Key->new;
-  my $alice_pubkey = $alice_key->pubkey_hex;
-  my $tmpdir = tempdir(CLEANUP => 1);
-  my $relay_a_store_file = File::Spec->catfile($tmpdir, 'relay-a-store.json');
-  my $relay_b_store_file = File::Spec->catfile($tmpdir, 'relay-b-store.json');
+  my $relay_a_port                 = _free_port();
+  my $relay_b_port                 = _free_port();
+  my $relay_a_url                  = "ws://127.0.0.1:$relay_a_port";
+  my $relay_b_url                  = "ws://127.0.0.1:$relay_b_port";
+  my $server_name                  = 'overnet-failover.irc.local';
+  my $alice_key                    = Net::Nostr::Key->new;
+  my $alice_pubkey                 = $alice_key->pubkey_hex;
+  my $tmpdir                       = tempdir(CLEANUP => 1);
+  my $relay_a_store_file           = File::Spec->catfile($tmpdir, 'relay-a-store.json');
+  my $relay_b_store_file           = File::Spec->catfile($tmpdir, 'relay-b-store.json');
 
   my $relay_a = _spawn_authoritative_nip29_relay(
     port       => $relay_a_port,
@@ -436,7 +444,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   _wait_for_authoritative_nip29_relay_ready($relay_a_url);
   _wait_for_authoritative_nip29_relay_ready($relay_b_url);
 
-  my $seed_key = Net::Nostr::Key->new;
+  my $seed_key         = Net::Nostr::Key->new;
   my $sign_group_event = sub {
     my ($event) = @_;
     return $seed_key->create_event(
@@ -453,7 +461,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     created_at => 1_744_303_000,
     closed     => 1,
   )->to_hash;
-  push @{$metadata_before->{tags}}, [ 'topic', 'Relay A Topic' ];
+  push @{$metadata_before->{tags}}, ['topic', 'Relay A Topic'];
   my $admins_before = Net::Nostr::Group->admins(
     pubkey     => 'f' x 64,
     group_id   => $group_id,
@@ -469,24 +477,16 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     pubkey     => 'f' x 64,
     group_id   => $group_id,
     created_at => 1_744_303_002,
-    members    => [ $alice_pubkey ],
+    members    => [$alice_pubkey],
   )->to_hash;
   my $roles_before = Net::Nostr::Group->roles(
     pubkey     => 'f' x 64,
     group_id   => $group_id,
     created_at => 1_744_303_003,
-    roles      => [
-      { name => 'irc.operator' },
-      { name => 'irc.voice' },
-    ],
+    roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
   )->to_hash;
 
-  my @seed_events = map { $sign_group_event->($_) } (
-    $metadata_before,
-    $admins_before,
-    $members_before,
-    $roles_before,
-  );
+  my @seed_events = map { $sign_group_event->($_) } ($metadata_before, $admins_before, $members_before, $roles_before,);
 
   for my $event (@seed_events) {
     my $published = _publish_nostr_event_to_relay(
@@ -501,12 +501,12 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     local_url       => $relay_b_url,
     subscription_id => 'relay-a-to-b-seed',
   );
-  is_deeply $initial_sync->{fetched_ids}, [ sort map { $_->{id} } @seed_events ],
+  is_deeply $initial_sync->{fetched_ids}, [sort map { $_->{id} } @seed_events],
     'relay B fetches the initial authoritative seed state through sync';
   is_deeply $initial_sync->{unresolved_ids}, [],
     'relay B resolves the full initial authoritative seed state through sync';
 
-  my $key_path = File::Spec->catfile($tmpdir, 'irc-server-authority-relay-failover-key.pem');
+  my $key_path    = File::Spec->catfile($tmpdir, 'irc-server-authority-relay-failover-key.pem');
   my $signing_key = Net::Nostr::Key->new;
   $signing_key->save_privkey($key_path);
 
@@ -540,23 +540,19 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
       lib_dirs         => [$irc_lib],
       constructor_args => {},
     },
-  ), 'runtime can register the real authoritative IRC adapter for failover coverage';
+    ),
+    'runtime can register the real authoritative IRC adapter for failover coverage';
 
   my $host = Overnet::Program::Host->new(
     command     => [$^X, $program_path],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
-      'adapters.use',
-      'events.append',
-      'events.read',
-      'nostr.read',
-      'nostr.write',
-      'subscriptions.read',
-      'overnet.emit_event',
-      'overnet.emit_state',
-      'overnet.emit_private_message',
-      'overnet.emit_capabilities',
+      'adapters.use',                 'events.append',
+      'events.read',                  'nostr.read',
+      'nostr.write',                  'subscriptions.read',
+      'overnet.emit_event',           'overnet.emit_state',
+      'overnet.emit_private_message', 'overnet.emit_capabilities',
     ],
     services => {
       'adapters.open_session'            => {},
@@ -582,7 +578,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   );
 
   $host->start;
-  is $host->state, 'ready', 'failover authoritative server reaches ready state';
+  is $host->current_state, 'ready', 'failover authoritative server reaches ready state';
   my $ready = _wait_for_ready_details($host);
   ok $ready, 'failover authoritative server publishes ready health details';
 
@@ -610,8 +606,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   );
 
   _write_client_line($alice, "JOIN $channel");
-  ok $host->pump(timeout_ms => $relay_host_pump_ms) >= 0,
-    'failover authoritative server pumps the initial JOIN';
+  ok $host->pump(timeout_ms => $relay_host_pump_ms) >= 0, 'failover authoritative server pumps the initial JOIN';
   my $join_bootstrap = _pump_hosts_until_client_lines(
     hosts           => [$host],
     client          => $alice,
@@ -620,12 +615,14 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $join_bootstrap, 'joined client receives the initial authoritative bootstrap';
-  is_deeply $join_bootstrap, [
+  is_deeply $join_bootstrap,
+    [
     ":alice JOIN $channel",
     ":$server_name TOPIC $channel :Relay A Topic",
     ":$server_name 353 alice = $channel :\@alice",
     ":$server_name 366 alice $channel :End of /NAMES list.",
-  ], 'initial authoritative JOIN bootstrap uses relay A state';
+    ],
+    'initial authoritative JOIN bootstrap uses relay A state';
 
   _stop_authoritative_nip29_relay($relay_a);
 
@@ -635,8 +632,8 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     created_at => 1_744_303_010,
     closed     => 1,
   )->to_hash;
-  push @{$metadata_after->{tags}}, [ 'topic', 'Relay B Catch-Up Topic' ];
-  push @{$metadata_after->{tags}}, [ 'ban', '*!*@*' ];
+  push @{$metadata_after->{tags}}, ['topic', 'Relay B Catch-Up Topic'];
+  push @{$metadata_after->{tags}}, ['ban',   '*!*@*'];
   $metadata_after = $sign_group_event->($metadata_after);
 
   my $published = _publish_nostr_event_to_relay(
@@ -659,8 +656,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   );
   ok grep({ $_ eq $metadata_after->{id} } @{$recovery_sync->{fetched_ids} || []}),
     'relay A fetches the newer authoritative state during recovery sync';
-  is_deeply $recovery_sync->{unresolved_ids}, [],
-    'relay A resolves the full recovery sync set';
+  is_deeply $recovery_sync->{unresolved_ids}, [], 'relay A resolves the full recovery sync set';
 
   my @replay_lines;
   for (1 .. 8) {
@@ -670,8 +666,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     }
     sleep 0.05;
   }
-  ok !grep { $_ eq ":alice JOIN $channel" } @replay_lines,
-    'relay catch-up does not replay the client JOIN bootstrap';
+  ok !grep { $_ eq ":alice JOIN $channel" } @replay_lines, 'relay catch-up does not replay the client JOIN bootstrap';
 
   _write_client_line($alice, "TOPIC $channel");
   ok _pump_hosts_until(
@@ -682,7 +677,8 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
       my $line = _read_client_line_optional($alice, 50);
       return defined($line) && $line eq ":$server_name 332 alice $channel :Relay B Catch-Up Topic" ? 1 : 0;
     },
-  ), 'joined client sees the catch-up topic from relay B after relay A recovery';
+    ),
+    'joined client sees the catch-up topic from relay B after relay A recovery';
 
   _write_client_line($alice, "MODE $channel +b");
   ok $host->pump(timeout_ms => $relay_host_pump_ms) >= 0,
@@ -695,18 +691,20 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $ban_lines, 'recovered authoritative state returns ban-list lines';
-  is_deeply $ban_lines, [
+  is_deeply $ban_lines,
+    [
     ":$server_name 367 alice $channel *!*\@* $server_name 0",
     ":$server_name 368 alice $channel :End of channel ban list",
-  ], 'recovered authoritative state preserves restrictive metadata instead of widening';
+    ],
+    'recovered authoritative state preserves restrictive metadata instead of widening';
 
   my $shutdown = $host->request_shutdown(reason => 'relay failover authoritative test complete');
-  is $shutdown->{state}, 'shutdown_complete', 'failover authoritative server handles runtime shutdown';
-  is $shutdown->{exit_code}, 0, 'failover authoritative server exits cleanly';
+  is $shutdown->{state},     'shutdown_complete', 'failover authoritative server handles runtime shutdown';
+  is $shutdown->{exit_code}, 0,                   'failover authoritative server exits cleanly';
 
   close $alice->{socket};
   _stop_authoritative_nip29_relay($relay_a);
   _stop_authoritative_nip29_relay($relay_b);
-};
+  };
 
 done_testing;

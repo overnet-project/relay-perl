@@ -3,31 +3,30 @@ use strictures 2;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
-  NAME             => 'Overnet::Relay',
-  DISTNAME         => 'Overnet-Relay',
-  AUTHOR           => 'Nicholas B. Hubbard <nicholashubbard@posteo.net>',
-  ABSTRACT         => 'Perl reference implementation of the Overnet relay and relay sync',
-  VERSION_FROM     => 'lib/Overnet/Relay.pm',
-  LICENSE          => 'gpl_3',
-  MIN_PERL_VERSION => '5.024',
+  NAME               => 'Overnet::Relay',
+  DISTNAME           => 'Overnet-Relay',
+  AUTHOR             => 'Nicholas B. Hubbard <nicholashubbard@posteo.net>',
+  ABSTRACT           => 'Perl reference implementation of the Overnet relay and relay sync',
+  VERSION_FROM       => 'lib/Overnet/Relay.pm',
+  LICENSE            => 'gpl_3',
+  MIN_PERL_VERSION   => '5.024',
   CONFIGURE_REQUIRES => {
     'ExtUtils::MakeMaker' => 0,
-    'strictures'         => 2,
+    'strictures'          => 2,
   },
-  PREREQ_PM        => {
-    'AnyEvent'    => 0,
-    'Class::Tiny' => 0,
-    'JSON'        => 0,
-    'Net::Nostr'  => 0,
-    'Overnet'     => 0.001,
-    'URI'         => 0,
-    'strictures'  => 2,
+  PREREQ_PM => {
+    'AnyEvent'       => 0,
+    'Class::Tiny'    => 0,
+    'JSON'           => 0,
+    'Net::Nostr'     => 0,
+    'Overnet'        => 0.001,
+    'Package::Stash' => 0,
+    'URI'            => 0,
+    'strictures'     => 2,
   },
-  EXE_FILES        => [
-    'bin/overnet-relay-backup.pl',
-    'bin/overnet-relay-service.pl',
-    'bin/overnet-relay-sync.pl',
-    'bin/overnet-relay.pl',
+  EXE_FILES => [
+    'bin/overnet-relay-backup.pl', 'bin/overnet-relay-service.pl',
+    'bin/overnet-relay-sync.pl',   'bin/overnet-relay.pl',
   ],
   test => {
     TESTS => join(

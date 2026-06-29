@@ -8,7 +8,7 @@ BEGIN {
 }
 
 my $path = File::Spec->catfile($FindBin::Bin, 'program-irc-server.t');
-my $ok = do $path;
+my $ok   = do $path;
 
 die $@ if !$ok && $@;
 die "Unable to load $path: $!" unless defined $ok;

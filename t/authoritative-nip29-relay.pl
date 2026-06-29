@@ -59,34 +59,33 @@ my %relay_args = (
   },
 );
 if (defined $opt{store_file}) {
-  $relay_args{store} = Overnet::Relay::Store::File->new(
-    path => $opt{store_file},
-  );
+  $relay_args{store} = Overnet::Relay::Store::File->new(path => $opt{store_file},);
 }
 $relay = Net::Nostr::Relay->new(%relay_args);
 
-$SIG{INT} = sub { $relay->stop };
+$SIG{INT}  = sub { $relay->stop };
 $SIG{TERM} = sub { $relay->stop };
 
 $relay->run($opt{host}, $opt{port});
 exit 0;
 
 sub _authorize_event {
-  my (%args) = @_;
-  my $relay = $args{relay};
-  my $relay_url = $args{relay_url};
+  my (%args)     = @_;
+  my $relay      = $args{relay};
+  my $relay_url  = $args{relay_url};
   my $grant_kind = $args{grant_kind};
-  my $event = $args{event};
+  my $event      = $args{event};
 
   my $kind = $event->kind;
-  return (1, '') unless $kind == 9000
+  return (1, '')
+    unless $kind == 9000
     || $kind == 9001
     || $kind == 9002
     || $kind == 9009
     || $kind == 9021
     || $kind == 9022;
 
-  my %tags = _first_tag_values($event->tags);
+  my %tags     = _first_tag_values($event->tags);
   my $group_id = $tags{h};
   return (0, 'invalid: authoritative NIP-29 control events require one h tag')
     unless defined $group_id && !ref($group_id) && length($group_id);
@@ -122,29 +121,29 @@ sub _authorize_event {
 
   if ($kind == 9021) {
     return _authorize_join_request(
-      event      => $event,
-      actor      => $actor_pubkey,
-      state      => $state,
+      event => $event,
+      actor => $actor_pubkey,
+      state => $state,
     );
   }
 
   if ($kind == 9022) {
     return (1, '')
       if $state->{members}{$actor_pubkey}
-        || _actor_membership_state(
-          relay    => $relay,
-          group_id => $group_id,
-          actor    => $actor_pubkey,
-        );
+      || _actor_membership_state(
+      relay    => $relay,
+      group_id => $group_id,
+      actor    => $actor_pubkey,
+      );
     return (0, 'unauthorized: actor is not a group member');
   }
 
   if ($kind == 9000) {
     my ($target_pubkey, $roles) = _target_and_roles_from_put_user($event->tags);
     if (!keys %{$state->{members} || {}}
-        && defined $target_pubkey
-        && $target_pubkey eq $actor_pubkey
-        && grep { $_ eq 'irc.operator' } @{$roles || []}) {
+      && defined $target_pubkey
+      && $target_pubkey eq $actor_pubkey
+      && grep { $_ eq 'irc.operator' } @{$roles || []}) {
       return (1, '');
     }
   }
@@ -158,9 +157,9 @@ sub _authorize_event {
 
 sub _authorize_join_request {
   my (%args) = @_;
-  my $event = $args{event};
-  my $actor = $args{actor};
-  my $state = $args{state};
+  my $event  = $args{event};
+  my $actor  = $args{actor};
+  my $state  = $args{state};
 
   return (1, '')
     if $state->{members}{$actor};
@@ -188,8 +187,8 @@ sub _authorize_join_request {
 }
 
 sub _derive_group_state {
-  my (%args) = @_;
-  my $relay = $args{relay};
+  my (%args)   = @_;
+  my $relay    = $args{relay};
   my $group_id = $args{group_id};
 
   my %members;
@@ -203,10 +202,10 @@ sub _derive_group_state {
 
     if ($kind == 39000 || $kind == 9002) {
       my %metadata = _metadata_from_tags($event->tags);
-      $closed = $metadata{closed} ? 1 : 0;
-      @ban_masks = @{$metadata{ban_masks} || []};
+      $closed     = $metadata{closed} ? 1 : 0;
+      @ban_masks  = @{$metadata{ban_masks} || []};
       $tombstoned = $metadata{tombstoned} ? 1 : 0;
-      %invites = ()
+      %invites    = ()
         if $tombstoned;
       next;
     }
@@ -218,7 +217,7 @@ sub _derive_group_state {
         next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
         $members{$pubkey} = {
           pubkey => $pubkey,
-          roles  => [ @{$tag}[2 .. $#{$tag}] ],
+          roles  => [@{$tag}[2 .. $#{$tag}]],
         };
       }
       next;
@@ -265,7 +264,7 @@ sub _derive_group_state {
     }
 
     if ($kind == 9021) {
-      my %tags = _first_tag_values($event->tags);
+      my %tags   = _first_tag_values($event->tags);
       my $joiner = $tags{overnet_actor};
       next unless defined $joiner && $joiner =~ /\A[0-9a-f]{64}\z/mx;
 
@@ -281,7 +280,8 @@ sub _derive_group_state {
       next unless defined $code && exists $invites{$code};
 
       my $invite = $invites{$code};
-      next if defined $invite->{target_pubkey}
+      next
+        if defined $invite->{target_pubkey}
         && $invite->{target_pubkey} ne $joiner;
 
       $members{$joiner} ||= {
@@ -293,7 +293,7 @@ sub _derive_group_state {
     }
 
     if ($kind == 9022) {
-      my %tags = _first_tag_values($event->tags);
+      my %tags   = _first_tag_values($event->tags);
       my $leaver = $tags{overnet_actor};
       next unless defined $leaver && $leaver =~ /\A[0-9a-f]{64}\z/mx;
       delete $members{$leaver};
@@ -303,7 +303,7 @@ sub _derive_group_state {
 
   return {
     closed     => $closed,
-    ban_masks  => [ @ban_masks ],
+    ban_masks  => [@ban_masks],
     members    => \%members,
     invites    => \%invites,
     tombstoned => $tombstoned ? 1 : 0,
@@ -311,10 +311,10 @@ sub _derive_group_state {
 }
 
 sub _actor_membership_state {
-  my (%args) = @_;
-  my $relay = $args{relay};
+  my (%args)   = @_;
+  my $relay    = $args{relay};
   my $group_id = $args{group_id};
-  my $actor = $args{actor};
+  my $actor    = $args{actor};
   return 0 unless defined $actor && $actor =~ /\A[0-9a-f]{64}\z/mx;
 
   my $closed = 0;
@@ -327,16 +327,16 @@ sub _actor_membership_state {
 
     if ($kind == 39000 || $kind == 9002) {
       my %metadata = _metadata_from_tags($event->tags);
-      $closed = $metadata{closed} ? 1 : 0;
+      $closed     = $metadata{closed}     ? 1 : 0;
       $tombstoned = $metadata{tombstoned} ? 1 : 0;
-      %invites = ()
+      %invites    = ()
         if $tombstoned;
       next;
     }
 
     if ($kind == 39002) {
       my $member_info = Net::Nostr::Group->members_from_event($event);
-      my %snapshot = map { $_ => 1 } @{$member_info->{members} || []};
+      my %snapshot    = map { $_ => 1 } @{$member_info->{members} || []};
       $member = $snapshot{$actor} ? 1 : 0;
       next;
     }
@@ -344,9 +344,7 @@ sub _actor_membership_state {
     if ($kind == 9009) {
       my ($code, $target_pubkey) = _invite_from_tags($event->tags);
       next unless defined $code;
-      $invites{$code} = {
-        (defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),
-      };
+      $invites{$code} = {(defined $target_pubkey ? (target_pubkey => $target_pubkey) : ()),};
       next;
     }
 
@@ -375,7 +373,8 @@ sub _actor_membership_state {
       my $code = $tags{code};
       next unless defined $code && exists $invites{$code};
       my $invite = $invites{$code};
-      next if defined $invite->{target_pubkey}
+      next
+        if defined $invite->{target_pubkey}
         && $invite->{target_pubkey} ne $actor;
 
       $member = 1;
@@ -401,7 +400,8 @@ sub _group_events {
 
   for my $event (@{$relay->store->all_events || []}) {
     my $kind = $event->kind;
-    next unless $kind == 39000
+    next
+      unless $kind == 39000
       || $kind == 39001
       || $kind == 39002
       || $kind == 9000
@@ -412,7 +412,8 @@ sub _group_events {
       || $kind == 9022;
 
     my %tags = _first_tag_values($event->tags);
-    next unless (defined $tags{d} && $tags{d} eq $group_id)
+    next
+      unless (defined $tags{d} && $tags{d} eq $group_id)
       || (defined $tags{h} && $tags{h} eq $group_id);
 
     push @events, $event;
@@ -421,17 +422,17 @@ sub _group_events {
   my @decorated;
   my $index = 0;
   for my $event (@events) {
-    push @decorated, [ $index++, $event ];
+    push @decorated, [$index++, $event];
   }
 
   return map { $_->[1] } sort {
     ($a->[1]->created_at <=> $b->[1]->created_at)
       || (
-        defined _event_sequence_for_sort($a->[1])
-          && defined _event_sequence_for_sort($b->[1])
-          && ((_event_authority_for_sort($a->[1]) || '') eq (_event_authority_for_sort($b->[1]) || ''))
-            ? (_event_sequence_for_sort($a->[1]) <=> _event_sequence_for_sort($b->[1]))
-            : (_event_sort_rank($a->[1]) <=> _event_sort_rank($b->[1]))
+         defined _event_sequence_for_sort($a->[1])
+      && defined _event_sequence_for_sort($b->[1])
+      && ((_event_authority_for_sort($a->[1]) || '') eq (_event_authority_for_sort($b->[1]) || ''))
+      ? (_event_sequence_for_sort($a->[1]) <=> _event_sequence_for_sort($b->[1]))
+      : (_event_sort_rank($a->[1]) <=> _event_sort_rank($b->[1]))
       )
       || ($a->[0] <=> $b->[0])
   } @decorated;
@@ -442,8 +443,8 @@ sub _event_authority_for_sort {
   my %tags = _first_tag_values($event->tags);
   return $tags{overnet_authority}
     if defined $tags{overnet_authority}
-      && !ref($tags{overnet_authority})
-      && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx;
+    && !ref($tags{overnet_authority})
+    && $tags{overnet_authority} =~ /\A[0-9a-f]{64}\z/mx;
   return;
 }
 
@@ -452,8 +453,8 @@ sub _event_sequence_for_sort {
   my %tags = _first_tag_values($event->tags);
   return 0 + $tags{overnet_sequence}
     if defined $tags{overnet_sequence}
-      && !ref($tags{overnet_sequence})
-      && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx;
+    && !ref($tags{overnet_sequence})
+    && $tags{overnet_sequence} =~ /\A[1-9]\d*\z/mx;
   return;
 }
 
@@ -483,22 +484,18 @@ sub _metadata_from_tags {
 
   for my $tag (@{$tags || []}) {
     next unless ref($tag) eq 'ARRAY' && @{$tag} >= 1;
-    $metadata{closed} = 1 if ($tag->[0] || '') eq 'closed';
-    $metadata{closed} = 0 if ($tag->[0] || '') eq 'open';
+    $metadata{closed}     = 1 if ($tag->[0] || '') eq 'closed';
+    $metadata{closed}     = 0 if ($tag->[0] || '') eq 'open';
     $metadata{tombstoned} = 1
       if ($tag->[0] || '') eq 'status'
-        && @{$tag} >= 2
-        && ($tag->[1] || '') eq 'tombstoned';
+      && @{$tag} >= 2
+      && ($tag->[1] || '') eq 'tombstoned';
     push @{$metadata{ban_masks}}, $tag->[1]
       if ($tag->[0] || '') eq 'ban' && @{$tag} >= 2;
   }
 
   my %seen;
-  $metadata{ban_masks} = [
-    sort grep {
-      defined($_) && !ref($_) && length($_) && !$seen{$_}++
-    } @{$metadata{ban_masks}}
-  ];
+  $metadata{ban_masks} = [sort grep { defined($_) && !ref($_) && length($_) && !$seen{$_}++ } @{$metadata{ban_masks}}];
   return %metadata;
 }
 
@@ -524,7 +521,7 @@ sub _target_and_roles_from_put_user {
     next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2 && ($tag->[0] || '') eq 'p';
     my $pubkey = $tag->[1];
     next unless defined $pubkey && $pubkey =~ /\A[0-9a-f]{64}\z/mx;
-    return ($pubkey, [ @{$tag}[2 .. $#{$tag}] ]);
+    return ($pubkey, [@{$tag}[2 .. $#{$tag}]]);
   }
 
   return (undef, []);

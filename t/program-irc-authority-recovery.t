@@ -4,38 +4,40 @@ use File::Spec;
 use FindBin;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
-use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'core-perl', 'lib');
+use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'core-perl',  'lib');
 
 use Overnet::Authority::HostedChannel;
 use Overnet::Program::IRC::Authority::Coordinator;
 
 {
-  package Local::RecoveryCoordinatorServer; ## no critic (Modules::RequireFilenameMatchesPackage)
+
+  package Local::RecoveryCoordinatorServer;
 
   sub new {
     return bless {
       config => {
         network => 'irc.example.test',
       },
-      authoritative_discovered_channels => {},
+      authoritative_discovered_channels   => {},
       authoritative_discovery_event_cache => {},
-      authoritative_channel_cache => {},
-      _subscriptions => {},
-      _source_channel_events => {},
-    }, shift;
+      authoritative_channel_cache         => {},
+      _subscriptions                      => {},
+      _source_channel_events              => {},
+      },
+      shift;
   }
 
   sub set_channel_events {
     my ($self, $channel, $events) = @_;
-    $self->{_source_channel_events}{$channel} = [ @{$events || []} ];
+    $self->{_source_channel_events}{$channel} = [@{$events || []}];
     return 1;
   }
 
-  sub _authority_relay_enabled { return 1 }
-  sub _authority_profile { return 'nip29' }
-  sub _authority_relay_url { return 'wss://relay.example.test' }
+  sub _authority_relay_enabled          { return 1 }
+  sub _authority_profile                { return 'nip29' }
+  sub _authority_relay_url              { return 'wss://relay.example.test' }
   sub _authority_relay_query_timeout_ms { return 1500 }
-  sub _authority_grant_kind { return 14142 }
+  sub _authority_grant_kind             { return 14142 }
 
   sub _request {
     my ($self, %args) = @_;
@@ -46,21 +48,17 @@ use Overnet::Program::IRC::Authority::Coordinator;
       $self->{_subscriptions}{$params->{subscription_id}} = $params->{filters};
       return {
         subscription_id => $params->{subscription_id},
-        events => [],
+        events          => [],
       };
     }
 
     if ($method eq 'nostr.read_subscription_snapshot') {
       my $filters = $self->{_subscriptions}{$params->{subscription_id}} || [];
-      return {
-        events => $self->_events_for_filters($filters),
-      };
+      return {events => $self->_events_for_filters($filters),};
     }
 
     if ($method eq 'nostr.query_events') {
-      return {
-        events => $self->_events_for_filters($params->{filters}),
-      };
+      return {events => $self->_events_for_filters($params->{filters}),};
     }
 
     return {};
@@ -101,8 +99,8 @@ use Overnet::Program::IRC::Authority::Coordinator;
     for my $key (keys %{$filter}) {
       next unless $key =~ /\A\#(.+)\z/mx;
       my $tag_name = $1;
-      my %allowed = map { $_ => 1 } @{$filter->{$key} || []};
-      my $matched = 0;
+      my %allowed  = map { $_ => 1 } @{$filter->{$key} || []};
+      my $matched  = 0;
       for my $tag (@{$event->{tags} || []}) {
         next unless ref($tag) eq 'ARRAY' && @{$tag} >= 2;
         next unless ($tag->[0] || '') eq $tag_name;
@@ -140,12 +138,8 @@ use Overnet::Program::IRC::Authority::Coordinator;
 
   sub _sort_authoritative_events {
     my ($self, $events) = @_;
-    return [
-      sort {
-        ($a->{created_at} || 0) <=> ($b->{created_at} || 0)
-          || (($a->{id} || '') cmp ($b->{id} || ''))
-      } @{$events || []}
-    ];
+    return [sort { ($a->{created_at} || 0) <=> ($b->{created_at} || 0) || (($a->{id} || '') cmp($b->{id} || '')) }
+        @{$events || []}];
   }
 
   sub _first_tag_values {
@@ -168,24 +162,24 @@ use Overnet::Program::IRC::Authority::Coordinator;
     for my $event (@{$events || []}) {
       next unless ref($event) eq 'HASH';
       my %tags = $self->_first_tag_values($event->{tags});
-      $topic = $tags{topic} if defined $tags{topic};
+      $topic      = $tags{topic} if defined $tags{topic};
       $tombstoned = ($tags{status} || '') eq 'tombstoned' ? 1 : 0;
     }
 
     return {
       channel_name => $channel,
       event_ids    => \@event_ids,
-      (defined($topic) ? (topic => $topic) : ()),
-      ($tombstoned ? (tombstoned => 1) : ()),
+      (defined($topic) ? (topic      => $topic) : ()),
+      ($tombstoned     ? (tombstoned => 1)      : ()),
     };
   }
 
   sub _authoritative_channel_state_from_view {
     my ($self, $view) = @_;
     return {
-      event_ids => [ @{$view->{event_ids} || []} ],
-      (defined($view->{topic}) ? (topic => $view->{topic}) : ()),
-      ($view->{tombstoned} ? (tombstoned => 1) : ()),
+      event_ids => [@{$view->{event_ids} || []}],
+      (defined($view->{topic}) ? (topic      => $view->{topic}) : ()),
+      ($view->{tombstoned}     ? (tombstoned => 1)              : ()),
     };
   }
 
@@ -212,9 +206,9 @@ sub _metadata_event {
     kind       => $args{kind} || 39000,
     created_at => $args{created_at},
     tags       => [
-      [ (($args{kind} || 39000) == 39000 ? 'd' : 'h'), $args{group_id} ],
-      (defined($args{topic}) ? ([ 'topic', $args{topic} ]) : ()),
-      ($args{tombstoned} ? ([ 'status', 'tombstoned' ]) : ()),
+      [(($args{kind} || 39000) == 39000 ? 'd' : 'h'), $args{group_id}],
+      (defined($args{topic}) ? (['topic',  $args{topic}]) : ()),
+      ($args{tombstoned}     ? (['status', 'tombstoned']) : ()),
     ],
   };
 }
@@ -225,88 +219,83 @@ sub _put_user_event {
     id         => $args{id},
     kind       => 9000,
     created_at => $args{created_at},
-    tags       => [
-      [ 'h', $args{group_id} ],
-      [ 'p', $args{target_pubkey} ],
-    ],
+    tags       => [['h', $args{group_id}], ['p', $args{target_pubkey}],],
   };
 }
 
-subtest 'refresh preserves cached authoritative events across stale relay snapshots and merges new events after reconnect' => sub {
+subtest
+  'refresh preserves cached authoritative events across stale relay snapshots and merges new events after reconnect' =>
+  sub {
   my $server = Local::RecoveryCoordinatorServer->new;
 
-  $server->set_channel_events('#ops', [
-    _metadata_event(
-      id         => 'm1',
-      created_at => 1,
-      group_id   => _group_id_for('#ops'),
-      topic      => 'Old topic',
-    ),
-    _put_user_event(
-      id            => 'u1',
-      created_at    => 2,
-      group_id      => _group_id_for('#ops'),
-      target_pubkey => ('a' x 64),
-    ),
-  ]);
-
-  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache(
-    $server,
+  $server->set_channel_events(
     '#ops',
-    refresh => 1,
+    [
+      _metadata_event(
+        id         => 'm1',
+        created_at => 1,
+        group_id   => _group_id_for('#ops'),
+        topic      => 'Old topic',
+      ),
+      _put_user_event(
+        id            => 'u1',
+        created_at    => 2,
+        group_id      => _group_id_for('#ops'),
+        target_pubkey => ('a' x 64),
+      ),
+    ]
   );
+
+  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
+    refresh => 1,);
   is_deeply(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
-    [ 'm1', 'u1' ],
+    ['m1', 'u1'],
     'initial refresh seeds the cached event history',
   );
 
   $server->set_channel_events('#ops', []);
-  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache(
-    $server,
-    '#ops',
-    refresh => 1,
-  );
+  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
+    refresh => 1,);
   is_deeply(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
-    [ 'm1', 'u1' ],
+    ['m1', 'u1'],
     'stale empty relay refresh does not erase cached events',
   );
 
-  $server->set_channel_events('#ops', [
-    _metadata_event(
-      id         => 'm1',
-      created_at => 1,
-      group_id   => _group_id_for('#ops'),
-      topic      => 'Old topic',
-    ),
-    _metadata_event(
-      id         => 'm2',
-      kind       => 9002,
-      created_at => 3,
-      group_id   => _group_id_for('#ops'),
-      topic      => 'New topic',
-    ),
-  ]);
-  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache(
-    $server,
+  $server->set_channel_events(
     '#ops',
-    refresh => 1,
+    [
+      _metadata_event(
+        id         => 'm1',
+        created_at => 1,
+        group_id   => _group_id_for('#ops'),
+        topic      => 'Old topic',
+      ),
+      _metadata_event(
+        id         => 'm2',
+        kind       => 9002,
+        created_at => 3,
+        group_id   => _group_id_for('#ops'),
+        topic      => 'New topic',
+      ),
+    ]
   );
+  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
+    refresh => 1,);
   is_deeply(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
-    [ 'm1', 'u1', 'm2' ],
+    ['m1', 'u1', 'm2'],
     'reconnect refresh merges newly seen events with the cached history',
   );
   is(
     $server->{authoritative_channel_cache}{'#ops'}{view}{topic},
-    'New topic',
-    'reconnect refresh updates derived topic state from the merged history',
+    'New topic', 'reconnect refresh updates derived topic state from the merged history',
   );
-};
+  };
 
 subtest 'out-of-order discovery replay keeps tombstones authoritative' => sub {
-  my $server = Local::RecoveryCoordinatorServer->new;
+  my $server          = Local::RecoveryCoordinatorServer->new;
   my $subscription_id = Overnet::Program::IRC::Authority::Coordinator::authoritative_discovery_subscription_id($server);
   $server->{authoritative_discovery_subscription_id} = $subscription_id;
 
@@ -346,33 +335,27 @@ subtest 'out-of-order discovery replay keeps tombstones authoritative' => sub {
 
 subtest 'restart recovery rebuilds discovered channels from relay snapshots' => sub {
   my $server = Local::RecoveryCoordinatorServer->new;
-  $server->set_channel_events('#ops', [
-    _metadata_event(
-      id         => 'm1',
-      created_at => 1,
-      group_id   => _group_id_for('#ops'),
-      topic      => 'Ops room',
-    ),
-  ]);
+  $server->set_channel_events(
+    '#ops',
+    [
+      _metadata_event(
+        id         => 'm1',
+        created_at => 1,
+        group_id   => _group_id_for('#ops'),
+        topic      => 'Ops room',
+      ),
+    ]
+  );
 
-  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_discovery_cache(
-    $server,
-    refresh => 1,
-  );
-  ok(
-    exists($server->{authoritative_discovered_channels}{'#ops'}),
-    'discovery cache is populated before restart',
-  );
+  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_discovery_cache($server, refresh => 1,);
+  ok(exists($server->{authoritative_discovered_channels}{'#ops'}), 'discovery cache is populated before restart',);
 
   delete $server->{authoritative_discovered_channels};
   delete $server->{authoritative_discovery_event_cache};
   delete $server->{authoritative_discovery_subscription_id};
   $server->{_subscriptions} = {};
 
-  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_discovery_cache(
-    $server,
-    refresh => 1,
-  );
+  Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_discovery_cache($server, refresh => 1,);
   ok(
     exists($server->{authoritative_discovered_channels}{'#ops'}),
     'restart recovery rebuilds discovery state from the relay snapshot',

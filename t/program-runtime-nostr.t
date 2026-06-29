@@ -3,9 +3,9 @@ use Test::More;
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
-use IPC::Open3 qw(open3);
-use POSIX qw(WNOHANG);
-use Symbol qw(gensym);
+use IPC::Open3  qw(open3);
+use POSIX       qw(WNOHANG);
+use Symbol      qw(gensym);
 use Time::HiRes qw(sleep time);
 
 use Net::Nostr::Client;
@@ -39,17 +39,14 @@ sub _free_port {
 sub _spawn_authoritative_nip29_relay {
   my (%args) = @_;
   my $stderr = gensym();
-  my $pid = open3(
-    my $stdin,
-    my $stdout,
-    $stderr,
-    $^X,
-    $authoritative_relay_script,
-    '--host', '127.0.0.1',
-    '--port', $args{port},
-    '--relay-url', $args{relay_url},
-    '--grant-kind', 14142,
-    (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
+  my $pid    = open3(
+    my $stdin,                   my $stdout,
+    $stderr,                     $^X,
+    $authoritative_relay_script, '--host',
+    '127.0.0.1',                 '--port',
+    $args{port},                 '--relay-url',
+    $args{relay_url},            '--grant-kind',
+    14142, (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
   );
 
   close $stdin;
@@ -124,11 +121,11 @@ sub _signed_event {
 }
 
 sub _drain_until_notification {
-  my (%args) = @_;
-  my $runtime = $args{runtime};
+  my (%args)     = @_;
+  my $runtime    = $args{runtime};
   my $session_id = $args{session_id};
   my $timeout_ms = $args{timeout_ms} || 1_000;
-  my $deadline = time() + ($timeout_ms / 1000);
+  my $deadline   = time() + ($timeout_ms / 1000);
 
   while (time() < $deadline) {
     my $notifications = $runtime->drain_runtime_notifications($session_id);
@@ -161,45 +158,27 @@ subtest 'protocol and permissions expose nostr runtime methods' => sub {
     'protocol accepts nostr.close_subscription as a service request method'
   );
 
-  is(
-    Overnet::Program::Permissions->required_permission_for_method('nostr.publish_event'),
-    'nostr.write',
-    'nostr.publish_event requires the write permission'
-  );
-  is(
-    Overnet::Program::Permissions->required_permission_for_method('nostr.query_events'),
-    'nostr.read',
-    'nostr.query_events requires the read permission'
-  );
-  is(
-    Overnet::Program::Permissions->required_permission_for_method('nostr.open_subscription'),
-    'nostr.read',
-    'nostr.open_subscription requires the read permission'
-  );
-  is(
-    Overnet::Program::Permissions->required_permission_for_method('nostr.read_subscription_snapshot'),
-    'nostr.read',
-    'nostr.read_subscription_snapshot requires the read permission'
-  );
-  is(
-    Overnet::Program::Permissions->required_permission_for_method('nostr.close_subscription'),
-    'nostr.read',
-    'nostr.close_subscription requires the read permission'
-  );
+  is(Overnet::Program::Permissions->required_permission_for_method('nostr.publish_event'),
+    'nostr.write', 'nostr.publish_event requires the write permission');
+  is(Overnet::Program::Permissions->required_permission_for_method('nostr.query_events'),
+    'nostr.read', 'nostr.query_events requires the read permission');
+  is(Overnet::Program::Permissions->required_permission_for_method('nostr.open_subscription'),
+    'nostr.read', 'nostr.open_subscription requires the read permission');
+  is(Overnet::Program::Permissions->required_permission_for_method('nostr.read_subscription_snapshot'),
+    'nostr.read', 'nostr.read_subscription_snapshot requires the read permission');
+  is(Overnet::Program::Permissions->required_permission_for_method('nostr.close_subscription'),
+    'nostr.read', 'nostr.close_subscription requires the read permission');
 };
 
 subtest 'delegation helper validates authoritative auth events and delegation grants' => sub {
   my $authority_key = Net::Nostr::Key->new;
-  my $delegate_key = Net::Nostr::Key->new;
+  my $delegate_key  = Net::Nostr::Key->new;
 
   my $auth_event = $authority_key->create_event(
     kind       => 22242,
     created_at => 1_744_301_000,
     content    => '',
-    tags       => [
-      [ 'relay', 'irc://irc.example.test/overnet' ],
-      [ 'challenge', 'abc123' ],
-    ],
+    tags       => [['relay', 'irc://irc.example.test/overnet'], ['challenge', 'abc123'],],
   )->to_hash;
 
   my $auth = Overnet::Authority::Delegation->verify_auth_event(
@@ -223,11 +202,11 @@ subtest 'delegation helper validates authoritative auth events and delegation gr
     created_at => 1_744_301_001,
     content    => '',
     tags       => [
-      [ 'relay', 'ws://127.0.0.1:7448' ],
-      [ 'server', 'irc://irc.example.test/overnet' ],
-      [ 'delegate', $delegate_key->pubkey_hex ],
-      [ 'session', 'session-abc' ],
-      [ 'expires_at', 1_744_304_600 ],
+      ['relay',      'ws://127.0.0.1:7448'],
+      ['server',     'irc://irc.example.test/overnet'],
+      ['delegate',   $delegate_key->pubkey_hex],
+      ['session',    'session-abc'],
+      ['expires_at', 1_744_304_600],
     ],
   )->to_hash;
 
@@ -259,16 +238,16 @@ subtest 'delegation helper validates authoritative auth events and delegation gr
 };
 
 subtest 'nostr services publish events, seed snapshots, and queue relay-backed subscription updates' => sub {
-  my $port = _free_port();
+  my $port      = _free_port();
   my $relay_url = "ws://127.0.0.1:$port";
-  my $relay = _spawn_authoritative_nip29_relay(
+  my $relay     = _spawn_authoritative_nip29_relay(
     port      => $port,
     relay_url => $relay_url,
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $runtime = Overnet::Program::Runtime->new;
-  my $services = Overnet::Program::Services->new(runtime => $runtime);
+  my $runtime    = Overnet::Program::Runtime->new;
+  my $services   = Overnet::Program::Services->new(runtime => $runtime);
   my $author_key = Net::Nostr::Key->new;
 
   my $first_event = _signed_text_note(
@@ -295,7 +274,7 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
       filters   => [
         {
           kinds   => [1],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
       ],
@@ -304,8 +283,8 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
     permissions => ['nostr.read'],
     session_id  => 'session-nostr',
   );
-  is scalar @{$queried->{events}}, 1, 'nostr.query_events returns matching relay events';
-  is $queried->{events}[0]{id}, $first_event->{id}, 'nostr.query_events returns the published event payload';
+  is scalar @{$queried->{events}}, 1,                  'nostr.query_events returns matching relay events';
+  is $queried->{events}[0]{id},    $first_event->{id}, 'nostr.query_events returns the published event payload';
 
   my $opened = $services->dispatch_request(
     'nostr.open_subscription',
@@ -315,7 +294,7 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
       filters         => [
         {
           kinds   => [1],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
       ],
@@ -323,9 +302,9 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
     permissions => ['nostr.read'],
     session_id  => 'session-nostr',
   );
-  is $opened->{subscription_id}, 'relay-sub-1', 'nostr.open_subscription returns the subscription id';
-  is scalar @{$opened->{events}}, 1, 'nostr.open_subscription returns the seeded snapshot';
-  is $opened->{events}[0]{id}, $first_event->{id}, 'seeded snapshot includes the published event';
+  is $opened->{subscription_id},  'relay-sub-1',      'nostr.open_subscription returns the subscription id';
+  is scalar @{$opened->{events}}, 1,                  'nostr.open_subscription returns the seeded snapshot';
+  is $opened->{events}[0]{id},    $first_event->{id}, 'seeded snapshot includes the published event';
 
   my $snapshot = $services->dispatch_request(
     'nostr.read_subscription_snapshot',
@@ -335,8 +314,8 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
     permissions => ['nostr.read'],
     session_id  => 'session-nostr',
   );
-  is scalar @{$snapshot->{events}}, 1, 'nostr.read_subscription_snapshot returns the current snapshot';
-  is $snapshot->{events}[0]{id}, $first_event->{id}, 'snapshot read returns the seeded event';
+  is scalar @{$snapshot->{events}}, 1,                  'nostr.read_subscription_snapshot returns the current snapshot';
+  is $snapshot->{events}[0]{id},    $first_event->{id}, 'snapshot read returns the seeded event';
 
   my $second_event = _signed_text_note(
     key        => $author_key,
@@ -354,11 +333,11 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
     session_id => 'session-nostr',
     timeout_ms => 1_500,
   );
-  is scalar @{$notifications}, 1, 'runtime queues one relay-backed subscription update';
-  is $notifications->[0]{method}, 'runtime.subscription_event', 'relay update uses runtime.subscription_event';
+  is scalar @{$notifications},    1,                              'runtime queues one relay-backed subscription update';
+  is $notifications->[0]{method}, 'runtime.subscription_event',   'relay update uses runtime.subscription_event';
   is $notifications->[0]{params}{subscription_id}, 'relay-sub-1', 'relay update records the subscription id';
-  is $notifications->[0]{params}{item_type}, 'nostr.event', 'relay update records the nostr.event item type';
-  is $notifications->[0]{params}{data}{id}, $second_event->{id}, 'relay update includes the new event payload';
+  is $notifications->[0]{params}{item_type},       'nostr.event', 'relay update records the nostr.event item type';
+  is $notifications->[0]{params}{data}{id},        $second_event->{id}, 'relay update includes the new event payload';
 
   $snapshot = $services->dispatch_request(
     'nostr.read_subscription_snapshot',
@@ -427,26 +406,29 @@ subtest 'nostr services publish events, seed snapshots, and queue relay-backed s
   );
   ok $relay_publish->{accepted}, 'relay accepts a post-close published event';
 
-  is scalar @{_drain_until_notification(
-    runtime    => $runtime,
-    session_id => 'session-nostr',
-    timeout_ms => 300,
-  )}, 0, 'closed nostr subscription queues no further relay-backed notifications';
+  is scalar @{
+    _drain_until_notification(
+      runtime    => $runtime,
+      session_id => 'session-nostr',
+      timeout_ms => 300,
+    )
+    },
+    0, 'closed nostr subscription queues no further relay-backed notifications';
 
   _stop_authoritative_nip29_relay($relay);
 };
 
 subtest 'nostr subscriptions merge multi-filter relay snapshots and refreshes' => sub {
-  my $port = _free_port();
+  my $port      = _free_port();
   my $relay_url = "ws://127.0.0.1:$port";
-  my $relay = _spawn_authoritative_nip29_relay(
+  my $relay     = _spawn_authoritative_nip29_relay(
     port      => $port,
     relay_url => $relay_url,
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $runtime = Overnet::Program::Runtime->new;
-  my $services = Overnet::Program::Services->new(runtime => $runtime);
+  my $runtime    = Overnet::Program::Runtime->new;
+  my $services   = Overnet::Program::Services->new(runtime => $runtime);
   my $author_key = Net::Nostr::Key->new;
 
   my $kind1_event = _signed_event(
@@ -483,12 +465,12 @@ subtest 'nostr subscriptions merge multi-filter relay snapshots and refreshes' =
       filters         => [
         {
           kinds   => [1],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
         {
           kinds   => [2],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
       ],
@@ -536,16 +518,16 @@ subtest 'nostr subscriptions merge multi-filter relay snapshots and refreshes' =
 };
 
 subtest 'nostr subscriptions survive live relay restart, preserve snapshots, and suppress replay duplicates' => sub {
-  my $port = _free_port();
+  my $port      = _free_port();
   my $relay_url = "ws://127.0.0.1:$port";
-  my $relay = _spawn_authoritative_nip29_relay(
+  my $relay     = _spawn_authoritative_nip29_relay(
     port      => $port,
     relay_url => $relay_url,
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $runtime = Overnet::Program::Runtime->new;
-  my $services = Overnet::Program::Services->new(runtime => $runtime);
+  my $runtime    = Overnet::Program::Runtime->new;
+  my $services   = Overnet::Program::Services->new(runtime => $runtime);
   my $author_key = Net::Nostr::Key->new;
 
   my $first_event = _signed_text_note(
@@ -572,7 +554,7 @@ subtest 'nostr subscriptions survive live relay restart, preserve snapshots, and
       filters         => [
         {
           kinds   => [1],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
       ],
@@ -681,20 +663,22 @@ subtest 'nostr subscriptions survive live relay restart, preserve snapshots, and
   _stop_authoritative_nip29_relay($relay);
 };
 
-subtest 'new runtime subscriptions rebuild from persisted relay history after restart without duplicate notifications' => sub {
-  my $tmpdir = tempdir(CLEANUP => 1);
+subtest
+  'new runtime subscriptions rebuild from persisted relay history after restart without duplicate notifications' =>
+  sub {
+  my $tmpdir     = tempdir(CLEANUP => 1);
   my $store_file = File::Spec->catfile($tmpdir, 'authoritative-relay-store.json');
-  my $port = _free_port();
-  my $relay_url = "ws://127.0.0.1:$port";
-  my $relay = _spawn_authoritative_nip29_relay(
+  my $port       = _free_port();
+  my $relay_url  = "ws://127.0.0.1:$port";
+  my $relay      = _spawn_authoritative_nip29_relay(
     port       => $port,
     relay_url  => $relay_url,
     store_file => $store_file,
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $runtime = Overnet::Program::Runtime->new;
-  my $services = Overnet::Program::Services->new(runtime => $runtime);
+  my $runtime    = Overnet::Program::Runtime->new;
+  my $services   = Overnet::Program::Services->new(runtime => $runtime);
   my $author_key = Net::Nostr::Key->new;
 
   my $first_event = _signed_text_note(
@@ -722,7 +706,7 @@ subtest 'new runtime subscriptions rebuild from persisted relay history after re
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $runtime_after = Overnet::Program::Runtime->new;
+  my $runtime_after  = Overnet::Program::Runtime->new;
   my $services_after = Overnet::Program::Services->new(runtime => $runtime_after);
 
   my $opened = $services_after->dispatch_request(
@@ -733,7 +717,7 @@ subtest 'new runtime subscriptions rebuild from persisted relay history after re
       filters         => [
         {
           kinds   => [1],
-          authors => [ $author_key->pubkey_hex ],
+          authors => [$author_key->pubkey_hex],
           limit   => 10,
         },
       ],
@@ -785,6 +769,6 @@ subtest 'new runtime subscriptions rebuild from persisted relay history after re
   );
 
   _stop_authoritative_nip29_relay($relay);
-};
+  };
 
 done_testing;
