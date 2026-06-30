@@ -2,6 +2,10 @@ use strictures 2;
 
 use ExtUtils::MakeMaker;
 
+our $VERSION = '0.001';
+
+my $space = chr 32;
+
 WriteMakefile(
   NAME               => 'Overnet::Relay',
   DISTNAME           => 'Overnet-Relay',
@@ -9,7 +13,7 @@ WriteMakefile(
   ABSTRACT           => 'Perl reference implementation of the Overnet relay and relay sync',
   VERSION_FROM       => 'lib/Overnet/Relay.pm',
   LICENSE            => 'gpl_3',
-  MIN_PERL_VERSION   => '5.024',
+  MIN_PERL_VERSION   => '5.040',
   CONFIGURE_REQUIRES => {
     'ExtUtils::MakeMaker' => 0,
     'strictures'          => 2,
@@ -30,7 +34,7 @@ WriteMakefile(
   ],
   test => {
     TESTS => join(
-      ' ',
+      $space,
       qw(
         t/bin-syntax.t
         t/makemaker-metadata.t

@@ -3,12 +3,12 @@ use strictures 2;
 use Cwd qw(getcwd);
 use File::Spec;
 use FindBin;
-use Test::More;
+use Test2::V0;
 
 my $makefile_pl = File::Spec->catfile($FindBin::Bin, '..', 'Makefile.PL');
 
 ok -f $makefile_pl, 'Makefile.PL exists'
-  or BAIL_OUT('Makefile.PL is required');
+  or bail_out('Makefile.PL is required');
 
 my $args = _capture_makefile_args($makefile_pl);
 
@@ -18,8 +18,8 @@ is $args->{AUTHOR},           'Nicholas B. Hubbard <nicholashubbard@posteo.net>'
 is $args->{ABSTRACT},         'Perl reference implementation of the Overnet relay and relay sync', 'abstract';
 is $args->{VERSION_FROM},     'lib/Overnet/Relay.pm', 'version comes from relay module';
 is $args->{LICENSE},          'gpl_3',                'license';
-is $args->{MIN_PERL_VERSION}, '5.024',                'minimum Perl version';
-is_deeply(
+is $args->{MIN_PERL_VERSION}, '5.040',                'minimum Perl version';
+is(
   $args->{CONFIGURE_REQUIRES},
   {
     'ExtUtils::MakeMaker' => 0,
@@ -28,7 +28,7 @@ is_deeply(
   'configure prerequisites include modules required to load Makefile.PL',
 );
 
-is_deeply(
+is(
   $args->{PREREQ_PM},
   {
     'AnyEvent'       => 0,
@@ -43,15 +43,15 @@ is_deeply(
   'runtime prerequisites stay on top-level non-core distributions',
 );
 
-is_deeply($args->{TEST_REQUIRES} || {}, {}, 'no extra non-core test-only prerequisites',);
+is($args->{TEST_REQUIRES} || {}, {}, 'no extra non-core test-only prerequisites',);
 
-is_deeply(
+is(
   $args->{EXE_FILES},
   ['bin/overnet-relay-backup.pl', 'bin/overnet-relay-service.pl', 'bin/overnet-relay-sync.pl', 'bin/overnet-relay.pl',],
   'installable relay scripts are explicit',
 );
 
-is_deeply(
+is(
   $args->{META_MERGE},
   {
     resources => {
@@ -62,7 +62,7 @@ is_deeply(
   'metadata resources point at the public repo',
 );
 
-is_deeply(
+is(
   $args->{test},
   {
     TESTS => join(
