@@ -2,11 +2,12 @@ use strictures 2;
 
 use File::Spec;
 use FindBin;
-use Test::More;
+use Test2::V0;
 
 my @scripts = (
   'bin/overnet-relay-backup.pl', 'bin/overnet-relay-service.pl',
   'bin/overnet-relay-sync.pl',   'bin/overnet-relay.pl',
+  'bin/overnet-release-gate.pl',
 );
 
 plan tests => scalar @scripts;

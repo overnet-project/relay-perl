@@ -1,7 +1,7 @@
 use strictures 2;
 
 use JSON ();
-use Test::More;
+use Test2::V0;
 
 use Net::Nostr::Filter;
 use Net::Nostr::Key;
@@ -153,8 +153,19 @@ subtest 'supports negentropy reconciliation with mirror-tag filters' => sub {
   ok $neg_msg, 'received negentropy response';
 
   my ($next, $have, $need) = $ne->reconcile($neg_msg->neg_msg);
-  is_deeply $have, [],                 'empty client has nothing the relay lacks';
-  is_deeply $need, [$state_event->id], 'relay reports the state event as needed';
+  is $have, [],                 'empty client has nothing the relay lacks';
+  is $need, [$state_event->id], 'relay reports the state event as needed';
+};
+
+subtest 'HTTP response writes fail on zero-byte syswrite' => sub {
+  tie *WRITE_FAILS, '_TestWriteHandle', writes => [0];
+
+  my $error = eval {
+    Overnet::Relay::_write_all(\*WRITE_FAILS, 'HTTP/1.1 200 OK');
+    1;
+  } ? undef : $@;
+
+  like $error, qr/Failed\ to\ write\ relay\ response/mx, 'zero-byte write is fatal';
 };
 
 done_testing;
@@ -248,5 +259,20 @@ sub _decode_http_json_body {
   sub sent_messages {
     my ($self) = @_;
     return $self->{sent_messages};
+  }
+}
+
+{
+
+  package _TestWriteHandle;
+
+  sub TIEHANDLE {
+    my ($class, %args) = @_;
+    return bless {writes => $args{writes} || []}, $class;
+  }
+
+  sub WRITE {
+    my ($self) = @_;
+    return shift @{$self->{writes}};
   }
 }

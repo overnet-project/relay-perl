@@ -872,8 +872,14 @@ sub _write_all {
 
   while ($offset < length($buffer)) {
     my $written = syswrite($fh, $buffer, length($buffer) - $offset, $offset);
-    if (!(defined $written && $written > 0)) {
-      last;
+    if (!defined $written) {
+      if ($OS_ERROR{EINTR}) {
+        next;
+      }
+      croak "Failed to write relay response: $OS_ERROR\n";
+    }
+    if ($written == 0) {
+      croak "Failed to write relay response: wrote zero bytes\n";
     }
     $offset += $written;
   }

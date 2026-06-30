@@ -1,26 +1,22 @@
 #!/usr/bin/env perl
 use strictures 2;
+use Carp           qw(croak);
+use English        qw(-no_match_vars);
 use File::Basename qw(dirname);
 use File::Spec;
 
-my $root = File::Spec->catdir(dirname(__FILE__), '..');
+our $VERSION = '0.001';
+
+my $root = File::Spec->catdir(dirname($PROGRAM_NAME), File::Spec->updir());
 chdir $root
-  or die "Can't chdir to $root: $!";
+  or croak "Can't chdir to $root: $OS_ERROR\n";
 
-my $plx = File::Spec->catfile($ENV{HOME}, '.local', 'bin', 'plx');
-
-exec $plx, 'prove',
+exec $EXECUTABLE_NAME, '-S', 'prove',
   '-Ilib',
-  '-Ilocal/lib/perl5',
   '-I../core-perl/lib',
-  '-I../core-perl/local/lib/perl5',
   't/spec-conformance-irc-server.t',
   't/program-irc-server.t',
   't/program-irc-server-relay.t',
   't/program-irc-server-relay-fault.t',
-  't/program-irc-server-relay-failover.t',
-  't/relay-live.t',
-  't/relay-sync-live.t',
-  't/deploy-restore-drill-live.t';
-
-die "Can't exec $plx: $!";
+  't/program-irc-server-relay-failover.t', 't/relay-live.t', 't/relay-sync-live.t', 't/deploy-restore-drill-live.t'
+  or croak "Can't exec prove: $OS_ERROR\n";
