@@ -1,13 +1,21 @@
 package Overnet::Relay::Deploy;
 
 use strictures 2;
+use Moo;
 
-use parent 'Overnet::Relay';
+extends 'Overnet::Relay';
 
 use JSON ();
 use Net::Nostr::Message;
 
 our $VERSION = '0.001';
+
+around new => sub {
+  my ($orig, $class, @args) = @_;
+  return Overnet::Relay::new($class, @args);
+};
+
+no Moo;
 
 sub _handle_event {
   my ($self, $conn_id, $event) = @_;

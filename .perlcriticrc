@@ -9,6 +9,15 @@ severity   = 5
 [Perl::Critic::Policy::Overnet::RequireTest2InTests]
 severity   = 5
 
+[Perl::Critic::Policy::Overnet::ProhibitBless]
+severity   = 5
+
+[Perl::Critic::Policy::Overnet::ProhibitNewConstructor]
+severity   = 5
+
+[Perl::Critic::Policy::Overnet::RequireMooConstructorArgsNormalization]
+severity   = 5
+
 [Perl::Critic::Policy::BuiltinFunctions::ProhibitBooleanGrep]
 severity   = 5
 
@@ -212,9 +221,6 @@ severity   = 5
 severity   = 5
 
 [Perl::Critic::Policy::Modules::RequireNoMatchVarsWithUseEnglish]
-severity   = 5
-
-[Perl::Critic::Policy::Modules::RequireVersionVar]
 severity   = 5
 
 [Perl::Critic::Policy::NamingConventions::ProhibitAmbiguousNames]

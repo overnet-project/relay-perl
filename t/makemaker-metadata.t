@@ -32,8 +32,8 @@ is(
   $args->{PREREQ_PM},
   {
     'AnyEvent'       => 0,
-    'Class::Tiny'    => 0,
     'JSON'           => 0,
+    'Moo'            => 0,
     'Net::Nostr'     => 0,
     'Overnet'        => 0.001,
     'Package::Stash' => 0,

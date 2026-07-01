@@ -1,8 +1,9 @@
 package Overnet::Relay::Store::File;
 
 use strictures 2;
+use Moo;
 
-use parent 'Net::Nostr::RelayStore';
+extends 'Net::Nostr::RelayStore';
 
 use Carp           qw(croak);
 use English        qw(-no_match_vars);
@@ -15,8 +16,11 @@ our $VERSION = '0.001';
 
 my $JSON = JSON->new->utf8->canonical;
 
-sub new {
-  my ($class, %args) = @_;
+has path => (is => 'rw');
+
+around new => sub {
+  my ($orig, $class, @args) = @_;
+  my %args = _constructor_args_hash(@args);
   my $path = delete $args{path};
 
   if (!(defined $path && !ref($path) && length($path))) {
@@ -24,14 +28,18 @@ sub new {
   }
 
   my $self = $class->SUPER::new(%args);
-  $self->{path} = $path;
+  $self->path($path);
   $self->_load_from_disk;
   return $self;
-}
+};
 
-sub path {
-  my ($self) = @_;
-  return $self->{path};
+no Moo;
+
+sub _constructor_args_hash {
+  my (@args) = @_;
+  return %{$args[0]} if @args == 1 && ref($args[0]) eq 'HASH';
+  return @args       if @args % 2 == 0;
+  die "constructor arguments must be a hash or hash reference\n";
 }
 
 sub store {

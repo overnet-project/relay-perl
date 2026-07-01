@@ -1,6 +1,7 @@
 package Overnet::Relay::ProfileContracts;
 
 use strictures 2;
+use Moo;
 
 use Carp     qw(croak);
 use JSON     ();
@@ -13,8 +14,17 @@ our $VERSION = '0.001';
 my %VALID_POLICY    = map { $_ => 1 } qw(off known required);
 my %CORE_EVENT_TYPE = map { $_ => 1 } qw(core.delegation core.removal);
 
-sub new {
-  my ($class, %args) = @_;
+has contracts     => (is => 'ro', reader => '_contracts');
+has policy        => (is => 'ro', reader => '_policy');
+has by_event_type => (is => 'ro', reader => '_by_event_type');
+has profiles      => (is => 'ro', reader => '_profiles');
+has event_types   => (is => 'ro', reader => '_event_types');
+
+no Moo;
+
+sub BUILDARGS {
+  my ($class, @args) = @_;
+  my %args = _constructor_args_hash(@args);
 
   my $input_contracts = $args{contracts};
   croak "profile_contracts must be an array reference"
@@ -48,13 +58,20 @@ sub new {
     }
   }
 
-  return bless {
+  return {
     contracts     => \@contracts,
     policy        => $policy,
     by_event_type => \%by_event_type,
     profiles      => [sort keys %profiles],
     event_types   => [sort keys %event_types],
-  }, $class;
+  };
+}
+
+sub _constructor_args_hash {
+  my (@args) = @_;
+  return %{$args[0]} if @args == 1 && ref($args[0]) eq 'HASH';
+  return @args       if @args % 2 == 0;
+  die "constructor arguments must be a hash or hash reference\n";
 }
 
 sub policy {

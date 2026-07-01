@@ -1,10 +1,7 @@
 package Overnet::Relay;
 
 use strictures 2;
-
-our $VERSION = '0.001';
-
-use parent 'Net::Nostr::Relay';
+use Moo;
 
 use AnyEvent;
 use Carp        qw(croak);
@@ -19,7 +16,19 @@ use Overnet::Core::Validator ();
 use Overnet::Relay::Info;
 use Overnet::Relay::ProfileContracts;
 
-use Class::Tiny qw(
+extends 'Net::Nostr::Relay';
+
+our $VERSION = '0.001';
+
+my $JSON                 = JSON->new->utf8->canonical;
+my %VALID_POLICY         = map { $_ => 1 } qw(open auth paid closed);
+my %VALID_OUTCOME_PREFIX = map { $_ => 1 } qw(
+  accepted invalid unauthorized payment_required policy_denied
+  not_found unsupported unavailable
+);
+my @DEFAULT_SUPPORTED_NIPS = (1, 11, 42, 77);
+
+my @OVERNET_RELAY_FIELDS = qw(
   name
   description
   banner
@@ -43,32 +52,66 @@ use Class::Tiny qw(
   pricing_url
 );
 
-my $JSON                 = JSON->new->utf8->canonical;
-my %VALID_POLICY         = map { $_ => 1 } qw(open auth paid closed);
-my %VALID_OUTCOME_PREFIX = map { $_ => 1 } qw(
-  accepted invalid unauthorized payment_required policy_denied
-  not_found unsupported unavailable
-);
-my @DEFAULT_SUPPORTED_NIPS = (1, 11, 42, 77);
+has name                    => (is => 'rw');
+has description             => (is => 'rw');
+has banner                  => (is => 'rw');
+has icon                    => (is => 'rw');
+has admin_pubkey            => (is => 'rw');
+has relay_pubkey            => (is => 'rw');
+has contact                 => (is => 'rw');
+has software                => (is => 'rw');
+has version                 => (is => 'rw');
+has terms_of_service        => (is => 'rw');
+has payments_url            => (is => 'rw');
+has supported_nips          => (is => 'rw');
+has retention_seconds       => (is => 'rw');
+has max_negentropy_sessions => (is => 'rw');
+has core_version            => (is => 'rw');
+has relay_profile           => (is => 'rw');
+has profile_contract_policy => (is => 'rw');
+has profile_contracts       => (is => 'rw');
+has _profile_contract_index => (is => 'rw');
+has service_policies        => (is => 'rw');
+has pricing_url             => (is => 'rw');
 
-sub new {
-  my ($class, %args) = @_;
+around new => sub {
+  my ($orig, $class, @args) = @_;
+  my %args = _constructor_args_hash(@args);
 
-  $args{core_version}            //= '0.1.0';
-  $args{relay_profile}           //= 'volunteer-basic';
-  $args{max_negentropy_sessions} //= 8;
-  $args{supported_nips}          = _normalized_supported_nips($args{supported_nips});
-  $args{service_policies}        = _validated_service_policies($args{service_policies});
-  $args{_profile_contract_index} = Overnet::Relay::ProfileContracts->new(
-    contracts => $args{profile_contracts},
-    policy    => $args{profile_contract_policy},
+  my %overnet_args;
+  for my $field (@OVERNET_RELAY_FIELDS) {
+    if (exists $args{$field}) {
+      $overnet_args{$field} = delete $args{$field};
+    }
+  }
+
+  $overnet_args{core_version}            //= '0.1.0';
+  $overnet_args{relay_profile}           //= 'volunteer-basic';
+  $overnet_args{max_negentropy_sessions} //= 8;
+  $overnet_args{supported_nips}          = _normalized_supported_nips($overnet_args{supported_nips});
+  $overnet_args{service_policies}        = _validated_service_policies($overnet_args{service_policies});
+  $overnet_args{_profile_contract_index} = Overnet::Relay::ProfileContracts->new(
+    contracts => $overnet_args{profile_contracts},
+    policy    => $overnet_args{profile_contract_policy},
   );
-  $args{profile_contract_policy} = $args{_profile_contract_index}->policy;
-  $args{profile_contracts}       = $args{_profile_contract_index}->contracts;
+  $overnet_args{profile_contract_policy} = $overnet_args{_profile_contract_index}->policy;
+  $overnet_args{profile_contracts}       = $overnet_args{_profile_contract_index}->contracts;
 
   my $self = $class->SUPER::new(%args);
+  for my $field (@OVERNET_RELAY_FIELDS) {
+    $self->$field($overnet_args{$field});
+  }
   $self->relay_info($self->_build_relay_info_document);
   return $self;
+};
+
+no Moo;
+
+sub _constructor_args_hash {
+  my (@args) = @_;
+  return %{$args[0]} if @args == 1 && ref($args[0]) eq 'HASH';
+  return @args       if @args % 2 == 0;
+  die "constructor arguments must be a hash or hash reference\n";
 }
 
 sub _build_relay_info_document {

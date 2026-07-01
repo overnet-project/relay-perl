@@ -1,44 +1,56 @@
 use strictures 2;
-use Test::More;
 use File::Spec;
 use FindBin;
+use Test2::V0;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
-use_ok('Overnet::Program::IRC::Command::Channel');
+my $module = 'Overnet::Program::IRC::Command::Channel';
+my $path   = $module =~ s{::}{/}gr . '.pm';
+my $loaded = eval {
+  require $path;
+  1;
+};
+ok $loaded, "$module loads"
+  or diag $@;
 
-can_ok(
-  'Overnet::Program::IRC::Command::Channel',
+for my $method (
   qw(
-    handle_join
-    handle_part
-    handle_privmsg_or_notice
-    handle_topic
-    handle_mode
-    handle_invite
-    handle_kick
-    handle_list
-    handle_overnetchannel
-  ),
-);
+  handle_join
+  handle_part
+  handle_privmsg_or_notice
+  handle_topic
+  handle_mode
+  handle_invite
+  handle_kick
+  handle_list
+  handle_overnetchannel
+  )
+) {
+  ok $module->can($method), "$module can $method";
+}
 
 {
 
   package Local::MockChannelCommandServer;
 
-  sub new {
-    return bless {
-      called  => [],
-      clients => {
+  use Moo;
+
+  has called => (is => 'ro', reader => '_called', default => sub { [] });
+  has clients => (
+    is      => 'ro',
+    default => sub {
+      return {
         1 => {
           id         => 1,
           registered => 1,
           nick       => 'alice',
         },
-      },
-      },
-      shift;
-  }
+      };
+    },
+  );
+
+  no Moo;
 
   sub called {
     return $_[0]{called};
@@ -68,14 +80,14 @@ ok(
   Overnet::Program::IRC::Command::Channel::handle_list($mock, 1, ['#overnet']),
   'channel command module handles LIST delegation',
 );
-is_deeply($mock->called, [[list => 1, '#overnet'],], 'LIST delegation calls back into the server list renderer',);
+is($mock->called, [[list => 1, '#overnet'],], 'LIST delegation calls back into the server list renderer',);
 
 $mock = Local::MockChannelCommandServer->new;
 ok(
   Overnet::Program::IRC::Command::Channel::handle_overnetchannel($mock, 1, []),
   'channel command module handles OVERNETCHANNEL validation',
 );
-is_deeply(
+is(
   $mock->called,
   [[need_more_params => 1, 'OVERNETCHANNEL'],],
   'OVERNETCHANNEL delegation preserves the existing parameter validation path',

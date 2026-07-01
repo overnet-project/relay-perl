@@ -1,49 +1,64 @@
 use strictures 2;
-use Test::More;
 use File::Spec;
 use FindBin;
+use Test2::V0;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
-use_ok('Overnet::Program::IRC::Command::Auth');
+my $module = 'Overnet::Program::IRC::Command::Auth';
+my $path   = $module =~ s{::}{/}gr . '.pm';
+my $loaded = eval {
+  require $path;
+  1;
+};
+ok $loaded, "$module loads"
+  or diag $@;
 
-can_ok(
-  'Overnet::Program::IRC::Command::Auth',
+for my $method (
   qw(
-    handle_cap
-    handle_authenticate
-    handle_overnetauth
-    start_sasl_nostr_exchange
-    complete_sasl_exchange
-    reset_sasl_state
-    apply_authoritative_auth_validation
-    clear_authoritative_binding
-    set_authoritative_account
-    ensure_authoritative_delegate_offer
-    accept_authoritative_delegate_event
-  ),
-);
+  handle_cap
+  handle_authenticate
+  handle_overnetauth
+  start_sasl_nostr_exchange
+  complete_sasl_exchange
+  reset_sasl_state
+  apply_authoritative_auth_validation
+  clear_authoritative_binding
+  set_authoritative_account
+  ensure_authoritative_delegate_offer
+  accept_authoritative_delegate_event
+  )
+) {
+  ok $module->can($method), "$module can $method";
+}
 
 {
 
   package Local::MockAuthCommandServer;
 
-  sub new {
-    return bless {
-      called => [],
-      config => {
-        server_name => 'irc.example.test',
-      },
-      clients => {
+  use Moo;
+
+  has called => (is => 'ro', reader => '_called', default => sub { [] });
+  has config => (
+    is      => 'ro',
+    default => sub {
+      return {server_name => 'irc.example.test',};
+    },
+  );
+  has clients => (
+    is      => 'ro',
+    default => sub {
+      return {
         1 => {
           id         => 1,
           registered => 0,
           nick       => 'alice',
         },
-      },
-      },
-      shift;
-  }
+      };
+    },
+  );
+
+  no Moo;
 
   sub called {
     return $_[0]{called};
@@ -80,7 +95,7 @@ can_ok(
 
 my $mock = Local::MockAuthCommandServer->new;
 ok(Overnet::Program::IRC::Command::Auth::handle_cap($mock, 1, ['LS']), 'auth command module handles CAP delegation',);
-is_deeply(
+is(
   $mock->called,
   [
     [
@@ -91,7 +106,7 @@ is_deeply(
   'CAP delegation preserves capability advertisement rendering',
 );
 
-is_deeply(
+is(
   [Local::MockAuthCommandServer->new->_supported_capabilities],
   ['message-tags', 'server-time', 'account-tag', 'account-notify', 'overnet-e2ee', 'sasl'],
   'mock capability order matches the server capability order used by compatibility tests',
@@ -102,7 +117,7 @@ ok(
   Overnet::Program::IRC::Command::Auth::handle_cap($mock, 1, ['REQ', 'server-time']),
   'auth command module handles CAP REQ delegation for server-time',
 );
-is_deeply(
+is(
   $mock->called,
   [[client_line => 1, ':irc.example.test CAP * ACK :server-time'],],
   'CAP REQ acknowledges server-time',
@@ -115,7 +130,7 @@ ok(
   Overnet::Program::IRC::Command::Auth::handle_cap($mock, 1, ['REQ', 'account-tag']),
   'auth command module handles CAP REQ delegation for account-tag',
 );
-is_deeply(
+is(
   $mock->called,
   [[client_line => 1, ':irc.example.test CAP * ACK :account-tag'],],
   'account-tag is ACKed when the capability is advertised',
@@ -128,7 +143,7 @@ ok(
   Overnet::Program::IRC::Command::Auth::handle_overnetauth($mock, 1, ['CHALLENGE']),
   'auth command module handles OVERNETAUTH challenge delegation',
 );
-is_deeply(
+is(
   $mock->called,
   [[challenge => 1], [notice => 1, 'OVERNETAUTH CHALLENGE ' . ('a' x 64)],],
   'OVERNETAUTH challenge delegation preserves the server notice path',

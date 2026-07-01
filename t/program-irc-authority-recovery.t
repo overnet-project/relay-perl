@@ -1,7 +1,7 @@
 use strictures 2;
-use Test::More;
 use File::Spec;
 use FindBin;
+use Test2::V0;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'core-perl',  'lib');
@@ -13,31 +13,33 @@ use Overnet::Program::IRC::Authority::Coordinator;
 
   package Local::RecoveryCoordinatorServer;
 
-  sub new {
-    return bless {
-      config => {
-        network => 'irc.example.test',
-      },
-      authoritative_discovered_channels   => {},
-      authoritative_discovery_event_cache => {},
-      authoritative_channel_cache         => {},
-      _subscriptions                      => {},
-      _source_channel_events              => {},
-      },
-      shift;
-  }
+  use Moo;
 
-  sub set_channel_events {
-    my ($self, $channel, $events) = @_;
-    $self->{_source_channel_events}{$channel} = [@{$events || []}];
-    return 1;
-  }
+  has config => (
+    is      => 'ro',
+    default => sub {
+      return {network => 'irc.example.test',};
+    },
+  );
+  has authoritative_discovered_channels   => (is => 'ro', default => sub { {} });
+  has authoritative_discovery_event_cache => (is => 'ro', default => sub { {} });
+  has authoritative_channel_cache         => (is => 'ro', default => sub { {} });
+  has _subscriptions                      => (is => 'ro', default => sub { {} });
+  has _source_channel_events              => (is => 'ro', default => sub { {} });
+
+  no Moo;
 
   sub _authority_relay_enabled          { return 1 }
   sub _authority_profile                { return 'nip29' }
   sub _authority_relay_url              { return 'wss://relay.example.test' }
   sub _authority_relay_query_timeout_ms { return 1500 }
   sub _authority_grant_kind             { return 14142 }
+
+  sub set_channel_events {
+    my ($self, $channel, $events) = @_;
+    $self->{_source_channel_events}{$channel} = [@{$events || []}];
+    return 1;
+  }
 
   sub _request {
     my ($self, %args) = @_;
@@ -248,7 +250,7 @@ subtest
 
   Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
     refresh => 1,);
-  is_deeply(
+  is(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
     ['m1', 'u1'],
     'initial refresh seeds the cached event history',
@@ -257,7 +259,7 @@ subtest
   $server->set_channel_events('#ops', []);
   Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
     refresh => 1,);
-  is_deeply(
+  is(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
     ['m1', 'u1'],
     'stale empty relay refresh does not erase cached events',
@@ -283,7 +285,7 @@ subtest
   );
   Overnet::Program::IRC::Authority::Coordinator::refresh_authoritative_nip29_channel_cache($server, '#ops',
     refresh => 1,);
-  is_deeply(
+  is(
     $server->{authoritative_channel_cache}{'#ops'}{view}{event_ids},
     ['m1', 'u1', 'm2'],
     'reconnect refresh merges newly seen events with the cached history',

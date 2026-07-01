@@ -1,7 +1,7 @@
 use strictures 2;
-use Test::More;
 use File::Spec;
 use FindBin;
+use Test2::V0;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
@@ -10,7 +10,10 @@ require Overnet::Program::IRC::Server;
 {
 
   package Local::AuthoritativeEmptyReadServer;
-  our @ISA = ('Overnet::Program::IRC::Server');
+
+  use Moo;
+  extends 'Overnet::Program::IRC::Server';
+  no Moo;
 
   sub _read_authoritative_nip29_events {
     my ($self, $channel, %args) = @_;
@@ -28,8 +31,15 @@ require Overnet::Program::IRC::Server;
 }
 
 subtest 'known hosted channels are not silently recreated from empty authoritative reads' => sub {
-  my $server = bless {
-    config => {
+  my $server = Local::AuthoritativeEmptyReadServer->new;
+  @{$server}{
+    qw(
+      config
+      authoritative_discovered_channels
+    )
+    }
+    = (
+    {
       server_name    => 'overnet.irc.local',
       network        => 'irc.example.test',
       adapter_config => {
@@ -37,14 +47,13 @@ subtest 'known hosted channels are not silently recreated from empty authoritati
         group_host        => 'groups.example.test',
       },
     },
-    authoritative_discovered_channels => {
+    {
       '#overnet' => {
         channel_name => '#overnet',
         group_id     => 'overnet',
       },
     },
-    },
-    'Local::AuthoritativeEmptyReadServer';
+    );
 
   my $result = $server->_authoritative_join_admission_for_client(
     '#overnet',
@@ -64,8 +73,15 @@ subtest 'known hosted channels are not silently recreated from empty authoritati
 };
 
 subtest 'local transient channel state does not make a hosted channel authoritative-known' => sub {
-  my $server = bless {
-    config => {
+  my $server = Local::AuthoritativeEmptyReadServer->new;
+  @{$server}{
+    qw(
+      config
+      channels
+    )
+    }
+    = (
+    {
       server_name    => 'overnet.irc.local',
       network        => 'irc.example.test',
       adapter_config => {
@@ -73,13 +89,12 @@ subtest 'local transient channel state does not make a hosted channel authoritat
         group_host        => 'groups.example.test',
       },
     },
-    channels => {
+    {
       '#fresh' => {
         channel_name => '#Fresh',
       },
     },
-    },
-    'Local::AuthoritativeEmptyReadServer';
+    );
 
   my $result = $server->_authoritative_join_admission_for_client(
     '#Fresh',

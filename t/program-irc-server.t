@@ -1,10 +1,10 @@
 use strictures 2;
 use AnyEvent;
-use Test::More;
 use JSON ();
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
+use Test2::V0;
 use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL        qw(SSL_VERIFY_NONE);
@@ -214,7 +214,7 @@ sub _assert_registration_prelude {
   my $server_name = $args{server_name} || 'overnet.irc.local';
   my $timeout_ms  = $args{timeout_ms}  || 1_000;
 
-  is_deeply [_read_client_lines($client, 3, $timeout_ms),],
+  is [_read_client_lines($client, 3, $timeout_ms),],
     [
     sprintf(':%s 001 %s :Welcome to Overnet IRC', $server_name, $nick),
     sprintf(
@@ -614,8 +614,8 @@ sub _assert_signed_emitted_matches_fixture {
   is $data->{kind},   $expected->{kind}, "$label kind matches fixture";
   cmp_ok $data->{created_at}, '>=', $time_window->{min}, "$label created_at is not before send time";
   cmp_ok $data->{created_at}, '<=', $time_window->{max}, "$label created_at is within the send window";
-  is_deeply $data->{tags},                       $expected->{tags}, "$label tags match fixture";
-  is_deeply JSON::decode_json($data->{content}), $expected_content, "$label content matches fixture semantically";
+  is $data->{tags},                       $expected->{tags}, "$label tags match fixture";
+  is JSON::decode_json($data->{content}), $expected_content, "$label content matches fixture semantically";
 
   my $event = Net::Nostr::Event->from_wire($data);
   ok eval { $event->validate; 1 }, "$label validates as a signed Nostr event";
@@ -642,7 +642,7 @@ sub _assert_private_message_emitted_matches_fixture {
 
   is $data->{decrypted_rumor}{kind}, 14, "$label uses a kind 14 rumor";
   like $data->{decrypted_rumor}{id}, qr/\A[0-9a-f]{64}\z/mx, "$label has a rumor id";
-  is_deeply $data->{decrypted_rumor}{content}, $expected_content,
+  is $data->{decrypted_rumor}{content}, $expected_content,
     "$label decrypted rumor content matches the expected logical payload";
 
   my @recipient_tags =
@@ -684,10 +684,11 @@ sub _assert_opaque_private_message_metadata {
 
   use strict;
   use warnings;
+  use Moo;
 
-  sub new {
-    return bless {sessions => {},}, shift;
-  }
+  has sessions => (is => 'ro', default => sub { {} });
+
+  no Moo;
 
   sub open_session {
     my ($self, %args) = @_;
@@ -1405,7 +1406,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
   ok _wait_for_dm_subscription_count($host, 1), 'alice registration completes its DM subscription open';
 
   _write_client_line($alice, 'LUSERS');
-  is_deeply [_read_client_lines($alice, 5, 1_000),],
+  is [_read_client_lines($alice, 5, 1_000),],
     [
     ':overnet.irc.local 251 Alice :There are 1 users and 0 services on 1 server',
     ':overnet.irc.local 252 Alice 0 :operator(s) online',
@@ -1436,7 +1437,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'USERHOST uses folded nick lookup and returns a minimal 302 reply';
 
   _write_client_line($alice, 'WHOIS aLiCe');
-  is_deeply [_read_client_lines($alice, 3, 1_000),],
+  is [_read_client_lines($alice, 3, 1_000),],
     [
     ':overnet.irc.local 311 Alice Alice alice 127.0.0.1 * :Alice Example',
     ':overnet.irc.local 312 Alice Alice overnet.irc.local :Overnet IRC',
@@ -1502,7 +1503,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     },
     ),
     'case-folded JOIN is emitted on the canonical channel object';
-  is_deeply [_read_client_lines($alice, 3, 1_000),],
+  is [_read_client_lines($alice, 3, 1_000),],
     [
     ':Alice JOIN #OverNet',
     ':overnet.irc.local 353 Alice = #OverNet :Alice',
@@ -1515,7 +1516,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'MODE query uses folded channel lookup and canonical channel spelling';
 
   _write_client_line($alice, 'NAMES #oVERnEt');
-  is_deeply [_read_client_lines($alice, 2, 1_000),],
+  is [_read_client_lines($alice, 2, 1_000),],
     [':overnet.irc.local 353 Alice = #OverNet :Alice', ':overnet.irc.local 366 Alice #OverNet :End of /NAMES list.',],
     'explicit NAMES uses the canonical channel spelling after case-folded lookup';
 
@@ -1524,7 +1525,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'TOPIC query returns 331 when no topic is known';
 
   _write_client_line($alice, 'WHO #oVERnEt');
-  is_deeply [_read_client_lines($alice, 2, 1_000),],
+  is [_read_client_lines($alice, 2, 1_000),],
     [
     ':overnet.irc.local 352 Alice #OverNet alice 127.0.0.1 overnet.irc.local Alice H :0 Alice Example',
     ':overnet.irc.local 315 Alice #OverNet :End of /WHO list.',
@@ -1575,7 +1576,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'TOPIC query returns 332 when a topic is known';
 
   _write_client_line($alice, 'LIST');
-  is_deeply [_read_client_lines($alice, 3, 1_000),],
+  is [_read_client_lines($alice, 3, 1_000),],
     [
     ':overnet.irc.local 321 Alice Channel :Users Name',
     ':overnet.irc.local 322 Alice #OverNet 1 :Compatibility topic',
@@ -1702,7 +1703,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'alice join is emitted through the runtime';
-  is_deeply [_read_client_lines($alice, 3, 1_000)],
+  is [_read_client_lines($alice, 3, 1_000)],
     [
     ':alice JOIN #overnet',
     ':overnet.irc.local 353 alice = #overnet :alice',
@@ -1751,7 +1752,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'bob join is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $alice,
@@ -1761,7 +1762,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':bob JOIN #overnet'],
     'joined clients receive later join lines',
   );
-  is_deeply [_read_client_lines($bob, 3, 1_000)],
+  is [_read_client_lines($bob, 3, 1_000)],
     [
     ':bob JOIN #overnet',
     ':overnet.irc.local 353 bob = #overnet :alice bob',
@@ -1787,7 +1788,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'bob topic update is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $alice,
@@ -1797,7 +1798,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':bob TOPIC #overnet :Overnet discussion and implementation'],
     'alice receives subscription-driven TOPIC fanout',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $bob,
@@ -1832,7 +1833,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'carol join is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $alice,
@@ -1842,7 +1843,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':carol JOIN #overnet'],
     'existing joined clients receive carol join lines',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $bob,
@@ -1852,7 +1853,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':carol JOIN #overnet'],
     'all joined clients receive carol join lines',
   );
-  is_deeply [_read_client_lines($carol, 4, 1_000)],
+  is [_read_client_lines($carol, 4, 1_000)],
     [
     ':carol JOIN #overnet',
     ':bob TOPIC #overnet :Overnet discussion and implementation',
@@ -1879,7 +1880,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'alice nick change is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $alice,
@@ -1889,7 +1890,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':alice NICK :alice_'],
     'alice receives her own NICK line',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $bob,
@@ -1899,7 +1900,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':alice NICK :alice_'],
     'bob receives alice nick change',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $carol,
@@ -1924,7 +1925,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'alice part is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $alice,
@@ -1934,7 +1935,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':alice_ PART #overnet :bye'],
     'alice receives her own PART line',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $bob,
@@ -1944,7 +1945,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     [':alice_ PART #overnet :bye'],
     'remaining channel members receive PART lines',
   );
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $carol,
@@ -1976,7 +1977,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     timeout_ms => 200,
     ),
     undef, 'bob does not receive a subscription-driven echo for his own NOTICE';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $carol,
@@ -2006,7 +2007,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     },
     ),
     'bob quit is emitted through the runtime';
-  is_deeply(
+  is(
     scalar _pump_hosts_until_client_lines(
       hosts      => [$host],
       client     => $carol,
@@ -2536,15 +2537,14 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
   is _read_client_line_optional($alice, 200), undef, 'sender does not receive a synthetic E2EE DM echo';
 
   my $received_transport = _decode_e2ee_transport_from_line($received_line);
-  is_deeply $received_transport, $wrap->to_hash,
-    'recipient receives the same visible wrapped transport that alice sent';
+  is $received_transport, $wrap->to_hash, 'recipient receives the same visible wrapped transport that alice sent';
 
   my $received_rumor = Net::Nostr::DirectMessage->receive(
     event         => Net::Nostr::Event->from_wire($received_transport),
     recipient_key => $bob_key,
   );
   is $received_rumor->kind, 14, 'bob can locally unwrap a kind 14 rumor';
-  is_deeply JSON::decode_json($received_rumor->content), $payload,
+  is JSON::decode_json($received_rumor->content), $payload,
     'bob can locally decrypt the original private-message payload';
 
   my $opaque_item = _find_emitted_item(
@@ -2677,7 +2677,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
     },
     ),
     'TLS client join is emitted through the runtime';
-  is_deeply [_read_client_lines($client, 3, 1_000)],
+  is [_read_client_lines($client, 3, 1_000)],
     [
     ':alice JOIN #overnet',
     ':overnet.irc.local 353 alice = #overnet :alice',
@@ -3133,7 +3133,7 @@ subtest 'IRC server program uses authoritative hosted-channel state for moderate
   ok $mode_request, 'program routes authoritative MODE writes through the adapter';
   is $mode_request->{input}{actor_pubkey},  $alice_pubkey, 'authoritative MODE writes include actor_pubkey';
   is $mode_request->{input}{target_pubkey}, $bob_pubkey,   'authoritative MODE writes include target_pubkey';
-  is_deeply $mode_request->{input}{current_roles}, [], 'authoritative MODE writes include current target roles';
+  is $mode_request->{input}{current_roles}, [],            'authoritative MODE writes include current target roles';
   ok _request_count_matching(
     $host->transcript,
     'from_program',
@@ -3319,7 +3319,7 @@ qr/\A:\Q$server_name\E\ CAP\ \*\ LS\ :message-tags\ server-time\ overnet-e2ee\ a
 
   _write_client_line($alice, 'AUTHENTICATE NOSTR');
   my $challenge_payload = _read_authenticate_payload($alice, 1_000);
-  is_deeply(
+  is(
     {
       map  { $_ => $challenge_payload->{$_} }
       grep { exists $challenge_payload->{$_} }
@@ -4523,7 +4523,7 @@ qr/\A:\Q$server_name\E\ CAP\ \*\ LS\ :message-tags\ server-time\ overnet-e2ee\ a
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $relay_sasl_join_bootstrap, 'authoritative SASL relay JOIN emits the expected bootstrap';
-    is_deeply $relay_sasl_join_bootstrap,
+    is $relay_sasl_join_bootstrap,
       [
       ":alice JOIN $channel",
       ":$server_name 353 alice = $channel :\@alice",
@@ -4930,7 +4930,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $instance_a_join_bootstrap, 'instance A emits the initial relay-backed JOIN bootstrap';
-    is_deeply $instance_a_join_bootstrap,
+    is $instance_a_join_bootstrap,
       [
       ":alice JOIN $channel",
       ":$server_name_a 353 alice = $channel :\@alice",
@@ -5973,7 +5973,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $alice_creation_bootstrap, 'instance A emits the hosted-channel creation bootstrap';
-    is_deeply $alice_creation_bootstrap,
+    is $alice_creation_bootstrap,
       [
       ":alice JOIN $channel",
       ":$server_name_a 353 alice = $channel :\@alice",
@@ -6079,7 +6079,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $discovered_join_bootstrap, 'instance B emits the join bootstrap for the discovered hosted channel';
-    is_deeply $discovered_join_bootstrap,
+    is $discovered_join_bootstrap,
       [
       ":bob JOIN $channel",
       ":$server_name_b 353 bob = $channel :\@alice bob",
@@ -6163,7 +6163,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $propagated_alice_part, 'instance B receives the propagated PART from the first instance';
-    is_deeply $propagated_alice_part, [":alice PART $channel :done",],
+    is $propagated_alice_part, [":alice PART $channel :done",],
       'bob receives the propagated alice PART on the created hosted channel';
 
     _write_client_line($bob_b, "PART $channel :done");
@@ -6510,7 +6510,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
     _write_client_line($alice_a, "JOIN $channel");
     ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
       'instance A pumps authoritative hosted-channel creation before tombstoning';
-    is_deeply(
+    is(
       scalar _pump_hosts_until_client_lines(
         hosts           => [$host_a],
         client          => $alice_a,
@@ -6548,7 +6548,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
 
     _write_client_line($bob_b, "JOIN $channel");
     ok $host_b->pump(timeout_ms => $relay_host_pump_ms) >= 0, 'instance B pumps authoritative JOIN before tombstoning';
-    is_deeply(
+    is(
       scalar _pump_hosts_until_client_lines(
         hosts           => [$host_b],
         client          => $bob_b,
@@ -6653,7 +6653,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $tombstoned_list_lines, 'instance B emits a LIST response after the hosted channel is tombstoned';
-    is_deeply $tombstoned_list_lines,
+    is $tombstoned_list_lines,
       [":$server_name_b 321 bob Channel :Users Name", ":$server_name_b 323 bob :End of /LIST",],
       'instance B LIST omits the tombstoned hosted channel';
 
@@ -6941,7 +6941,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
     _write_client_line($alice_a, "JOIN $channel");
     ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
       'instance A pumps authoritative hosted-channel creation before undelete';
-    is_deeply(
+    is(
       scalar _pump_hosts_until_client_lines(
         hosts           => [$host_a],
         client          => $alice_a,
@@ -6959,7 +6959,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
 
     _write_client_line($bob_b, "JOIN $channel");
     ok $host_b->pump(timeout_ms => $relay_host_pump_ms) >= 0, 'instance B pumps authoritative JOIN before undelete';
-    is_deeply(
+    is(
       scalar _pump_hosts_until_client_lines(
         hosts           => [$host_b],
         client          => $bob_b,
@@ -6996,7 +6996,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $topic_lines, 'alice receives the authoritative TOPIC line before undelete';
-    is_deeply $topic_lines, [":alice TOPIC $channel :$topic_text",],
+    is $topic_lines, [":alice TOPIC $channel :$topic_text",],
       'the authoritative TOPIC line is rendered before undelete';
     $drain_client_lines->($bob_b, 10);
 
@@ -7011,7 +7011,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $mode_lines, 'alice receives the authoritative MODE +i line before undelete';
-    is_deeply $mode_lines, [":alice MODE $channel +i",], 'the authoritative MODE +i line is rendered before undelete';
+    is $mode_lines, [":alice MODE $channel +i",], 'the authoritative MODE +i line is rendered before undelete';
     $drain_client_lines->($bob_b, 10);
 
     _write_client_line($alice_a, "OVERNETCHANNEL DELETE $channel");
@@ -7164,7 +7164,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $undelete_join_bootstrap, 'instance B emits the JOIN bootstrap after UNDELETE';
-    is_deeply $undelete_join_bootstrap,
+    is $undelete_join_bootstrap,
       [
       ":bob JOIN $channel",
       ":alice TOPIC $channel :$topic_text",
@@ -7176,7 +7176,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
     _write_client_line($alice_a, "NAMES $channel");
     ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0,
       'instance A pumps authoritative NAMES after the retained member rejoins';
-    is_deeply(
+    is(
       scalar _pump_hosts_until_client_lines(
         hosts           => [$host_a, $host_b],
         client          => $alice_a,
@@ -7500,7 +7500,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $alice_ban_join_bootstrap, 'instance A emits the operator bootstrap before authoritative bans';
-    is_deeply $alice_ban_join_bootstrap,
+    is $alice_ban_join_bootstrap,
       [
       ":alice JOIN $channel",
       ":$server_name_a 353 alice = $channel :\@alice",
@@ -7519,7 +7519,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $bob_ban_join_bootstrap, 'instance B emits the initial open-channel JOIN bootstrap before the ban';
-    is_deeply $bob_ban_join_bootstrap,
+    is $bob_ban_join_bootstrap,
       [
       ":bob JOIN $channel",
       ":$server_name_b 353 bob = $channel :\@alice bob",
@@ -7683,7 +7683,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
       timeout_ms      => $relay_propagation_timeout_ms,
     );
     ok $bob_unban_join_bootstrap, 'instance B emits the post-unban JOIN bootstrap';
-    is_deeply $bob_unban_join_bootstrap,
+    is $bob_unban_join_bootstrap,
       [
       ":bob JOIN $channel",
       ":$server_name_b 353 bob = $channel :\@alice bob",

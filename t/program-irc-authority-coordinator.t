@@ -1,42 +1,52 @@
 use strictures 2;
-use Test::More;
 use File::Spec;
 use FindBin;
+use Test2::V0;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server', 'lib');
 
-use_ok('Overnet::Program::IRC::Authority::Coordinator');
+my $module = 'Overnet::Program::IRC::Authority::Coordinator';
+my $path   = $module =~ s{::}{/}gr . '.pm';
+my $loaded = eval {
+  require $path;
+  1;
+};
+ok $loaded, "$module loads"
+  or diag $@;
 
-can_ok(
-  'Overnet::Program::IRC::Authority::Coordinator',
+for my $method (
   qw(
-    authoritative_grant_subscription_id
-    authoritative_discovery_subscription_id
-    authoritative_channel_subscription_ids
-    ensure_authoritative_grant_subscription
-    ensure_authoritative_discovery_subscription
-    ensure_authoritative_channel_subscription
-    read_authoritative_nip29_events
-    read_authoritative_grant_events
-    publish_authoritative_nip29_event
-    handle_subscription_event
-  ),
-);
+  authoritative_grant_subscription_id
+  authoritative_discovery_subscription_id
+  authoritative_channel_subscription_ids
+  ensure_authoritative_grant_subscription
+  ensure_authoritative_discovery_subscription
+  ensure_authoritative_channel_subscription
+  read_authoritative_nip29_events
+  read_authoritative_grant_events
+  publish_authoritative_nip29_event
+  handle_subscription_event
+  )
+) {
+  ok $module->can($method), "$module can $method";
+}
 
 {
 
   package Local::MockAuthorityCoordinatorServer;
 
-  sub new {
-    return bless {
-      config => {
-        network => 'example.test',
-      },
-      authoritative_grant_subscription_id => undef,
-      called                              => [],
-      },
-      shift;
-  }
+  use Moo;
+
+  has config => (
+    is      => 'ro',
+    default => sub {
+      return {network => 'example.test',};
+    },
+  );
+  has authoritative_grant_subscription_id => (is => 'rw');
+  has called                              => (is => 'ro', reader => '_called', default => sub { [] });
+
+  no Moo;
 
   sub called {
     return $_[0]{called};
@@ -85,7 +95,7 @@ is(
   'coordinator derives the grant subscription id from the network',
 );
 
-is_deeply(
+is(
   [Overnet::Program::IRC::Authority::Coordinator::authoritative_channel_subscription_ids($mock, '#ops',)],
   [
     'irc.authority.meta:example.test:groups.example.test:ops',
@@ -95,14 +105,14 @@ is_deeply(
 );
 
 $mock->{called} = [];
-is_deeply(
+is(
   Overnet::Program::IRC::Authority::Coordinator::load_authoritative_nip29_events(
     $mock, '#ops', refresh => 1,
   ),
   [],
   'forced authoritative channel reads use direct relay queries',
 );
-is_deeply(
+is(
   [map { $_->{method} } @{$mock->called}],
   ['nostr.query_events', 'nostr.query_events'],
   'forced authoritative channel reads do not open long-lived subscriptions before publishing',
@@ -114,7 +124,7 @@ is(
   'irc.authority.grants:example.test',
   'coordinator opens the authoritative grant subscription',
 );
-is_deeply(
+is(
   $mock->called,
   [
     {

@@ -1,7 +1,7 @@
 use strictures 2;
 
 use JSON ();
-use Test::More;
+use Test2::V0;
 
 use Net::Nostr::Key;
 use Net::Nostr::Message;
@@ -68,8 +68,8 @@ subtest 'configured contracts default to known policy and validate matching even
   is $info->{policy}, 'known', 'metadata advertises policy';
   ok $info->{configured}, 'metadata advertises configured contracts';
   ok $info->{enforced},   'metadata advertises enforcement';
-  is_deeply $info->{profiles},    ['chat'],         'metadata advertises configured profiles';
-  is_deeply $info->{event_types}, ['chat.message'], 'metadata advertises configured event types';
+  is $info->{profiles},    ['chat'],         'metadata advertises configured profiles';
+  is $info->{event_types}, ['chat.message'], 'metadata advertises configured event types';
 };
 
 subtest 'off policy keeps configured contracts non-enforcing' => sub {
@@ -310,9 +310,11 @@ sub _last_message_of_type {
 
   package _TestConn;
 
-  sub new {
-    return bless {sent_messages => []}, shift;
-  }
+  use Moo;
+
+  has sent_messages => (is => 'ro', reader => '_sent_messages', default => sub { [] });
+
+  no Moo;
 
   sub send {
     my ($self, $message) = @_;
@@ -324,4 +326,5 @@ sub _last_message_of_type {
     my ($self) = @_;
     return $self->{sent_messages};
   }
+
 }

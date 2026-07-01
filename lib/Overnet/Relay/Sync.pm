@@ -1,16 +1,11 @@
 package Overnet::Relay::Sync;
 
 use strictures 2;
+use Moo;
 
 use AnyEvent;
 use Carp    qw(croak);
 use English qw(-no_match_vars);
-
-use Class::Tiny qw(
-  local_relay
-  local_url
-  timeout_seconds
-);
 
 use Net::Nostr::Client;
 use Net::Nostr::Filter;
@@ -18,8 +13,15 @@ use Net::Nostr::Negentropy;
 
 our $VERSION = '0.001';
 
-sub new {
-  my ($class, %args) = @_;
+has local_relay     => (is => 'ro');
+has local_url       => (is => 'ro');
+has timeout_seconds => (is => 'ro');
+
+no Moo;
+
+sub BUILDARGS {
+  my ($class, @args) = @_;
+  my %args    = _constructor_args_hash(@args);
   my %known   = map  { $_ => 1 } qw(local_relay local_url timeout_seconds);
   my @unknown = grep { !$known{$_} } keys %args;
   if (@unknown) {
@@ -45,7 +47,14 @@ sub new {
     croak 'timeout_seconds must be a positive integer';
   }
 
-  return bless \%args, $class;
+  return \%args;
+}
+
+sub _constructor_args_hash {
+  my (@args) = @_;
+  return %{$args[0]} if @args == 1 && ref($args[0]) eq 'HASH';
+  return @args       if @args % 2 == 0;
+  die "constructor arguments must be a hash or hash reference\n";
 }
 
 sub sync_once {
@@ -608,7 +617,7 @@ The caller provides relay URLs, filters, and optional timeout values.
 
 =head1 DEPENDENCIES
 
-Requires L<AnyEvent>, L<Class::Tiny>, and L<Net::Nostr>.
+Requires L<AnyEvent>, L<Moo>, and L<Net::Nostr>.
 
 =head1 INCOMPATIBILITIES
 

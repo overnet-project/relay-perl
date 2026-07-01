@@ -1,27 +1,10 @@
 package Overnet::Relay::Info;
 
 use strictures 2;
+use Moo;
 
 use Carp qw(croak);
 use JSON ();
-
-use Class::Tiny qw(
-  name
-  description
-  banner
-  icon
-  pubkey
-  self
-  contact
-  software
-  version
-  terms_of_service
-  payments_url
-  overnet
-  _supported_nips
-  _limitation
-  _fees
-);
 
 our $VERSION = '0.001';
 
@@ -33,8 +16,27 @@ my @SCALAR_FIELDS = qw(
 my @STRUCT_FIELDS = qw(supported_nips limitation fees overnet);
 my $JSON          = JSON->new->utf8->canonical;
 
-sub new {
-  my ($class, %args) = @_;
+has name             => (is => 'ro');
+has description      => (is => 'ro');
+has banner           => (is => 'ro');
+has icon             => (is => 'ro');
+has pubkey           => (is => 'ro');
+has self             => (is => 'ro');
+has contact          => (is => 'ro');
+has software         => (is => 'ro');
+has version          => (is => 'ro');
+has terms_of_service => (is => 'ro');
+has payments_url     => (is => 'ro');
+has overnet          => (is => 'ro');
+has _supported_nips  => (is => 'ro');
+has _limitation      => (is => 'ro');
+has _fees            => (is => 'ro');
+
+no Moo;
+
+sub BUILDARGS {
+  my ($class, @args) = @_;
+  my %args = _constructor_args_hash(@args);
 
   my %known   = map  { $_ => 1 } (@SCALAR_FIELDS, @STRUCT_FIELDS);
   my @unknown = grep { !$known{$_} } keys %args;
@@ -42,25 +44,32 @@ sub new {
     croak 'unknown argument(s): ' . join ', ', sort @unknown;
   }
 
-  my $self = bless {}, $class;
+  my %state;
   for my $field (@SCALAR_FIELDS) {
     if (exists $args{$field}) {
-      $self->{$field} = $args{$field};
+      $state{$field} = $args{$field};
     }
   }
 
-  $self->{_supported_nips} = [@{$args{supported_nips} || []}];
-  $self->{_limitation} =
+  $state{_supported_nips} = [@{$args{supported_nips} || []}];
+  $state{_limitation} =
     ref($args{limitation}) eq 'HASH'
     ? {%{$args{limitation}}}
     : undef;
-  $self->{_fees} =
+  $state{_fees} =
     ref($args{fees}) eq 'HASH'
     ? {%{$args{fees}}}
     : undef;
-  $self->overnet(ref($args{overnet}) eq 'HASH' ? {%{$args{overnet}}} : undef);
+  $state{overnet} = ref($args{overnet}) eq 'HASH' ? {%{$args{overnet}}} : undef;
 
-  return $self;
+  return \%state;
+}
+
+sub _constructor_args_hash {
+  my (@args) = @_;
+  return %{$args[0]} if @args == 1 && ref($args[0]) eq 'HASH';
+  return @args       if @args % 2 == 0;
+  die "constructor arguments must be a hash or hash reference\n";
 }
 
 sub supported_nips {
@@ -250,7 +259,7 @@ All relay info fields are supplied by the caller.
 
 =head1 DEPENDENCIES
 
-Requires L<Class::Tiny> and L<JSON>.
+Requires L<Moo> and L<JSON>.
 
 =head1 INCOMPATIBILITIES
 

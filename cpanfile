@@ -1,6 +1,6 @@
 requires 'strictures', '2';
 requires 'Net::Nostr';
-requires 'Class::Tiny';
+requires 'Moo';
 requires 'JSON';
 requires 'Package::Stash';
 

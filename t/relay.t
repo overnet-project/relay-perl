@@ -1,6 +1,7 @@
 use strictures 2;
 
-use JSON ();
+use File::Temp qw(tempdir);
+use JSON       ();
 use Test2::V0;
 
 use Net::Nostr::Filter;
@@ -8,8 +9,59 @@ use Net::Nostr::Key;
 use Net::Nostr::Message;
 use Net::Nostr::Negentropy;
 use Overnet::Relay;
+use Overnet::Relay::Deploy;
+use Overnet::Relay::Info;
+use Overnet::Relay::ProfileContracts;
+use Overnet::Relay::Store::File;
+use Overnet::Relay::Sync;
 
 my $JSON = JSON->new->utf8->canonical;
+
+subtest 'Moo constructors preserve hashref argument compatibility' => sub {
+  my $relay = Overnet::Relay->new(
+    {
+      relay_url               => 'ws://relay.example.test',
+      name                    => 'Hashref Relay',
+      profile_contract_policy => 'off',
+    }
+  );
+  ok $relay->isa('Overnet::Relay'), 'relay constructed';
+  is $relay->name,         'Hashref Relay', 'relay received Overnet args';
+  is $relay->core_version, '0.1.0',         'relay defaults still applied';
+
+  my $deploy = Overnet::Relay::Deploy->new(
+    {
+      relay_url               => 'ws://deploy.example.test',
+      name                    => 'Deploy Relay',
+      profile_contract_policy => 'off',
+    }
+  );
+  ok $deploy->isa('Overnet::Relay::Deploy'), 'deploy relay constructed';
+  is $deploy->name, 'Deploy Relay', 'deploy relay received Overnet args';
+
+  my $info = Overnet::Relay::Info->new({name => 'Info Relay', supported_nips => []});
+  ok $info->isa('Overnet::Relay::Info'), 'relay info constructed';
+  is $info->name, 'Info Relay', 'relay info received args';
+
+  my $contracts = Overnet::Relay::ProfileContracts->new({contracts => [], policy => 'off'});
+  ok $contracts->isa('Overnet::Relay::ProfileContracts'), 'profile contracts constructed';
+  is $contracts->policy, 'off', 'profile contract policy received args';
+
+  my $sync = Overnet::Relay::Sync->new({local_relay => _TestSyncRelay->new});
+  ok $sync->isa('Overnet::Relay::Sync'), 'relay sync constructed';
+  is $sync->timeout_seconds, 5, 'relay sync defaults still applied';
+
+  my $dir   = tempdir(CLEANUP => 1);
+  my $store = Overnet::Relay::Store::File->new({path => "$dir/store.json"});
+  ok $store->isa('Overnet::Relay::Store::File'), 'file store constructed';
+  is $store->path, "$dir/store.json", 'file store received path';
+
+  my $error = eval {
+    Overnet::Relay::Store::File->new;
+    1;
+  } ? undef : $@;
+  like $error, qr/path\ is\ required/mx, 'file store still requires a path';
+};
 
 subtest 'NIP-11 info includes Overnet metadata' => sub {
   my $relay = _build_relay();
@@ -244,11 +296,26 @@ sub _decode_http_json_body {
 
 {
 
+  package _TestSyncRelay;
+
+  use Moo;
+
+  no Moo;
+
+  sub store { return {}; }
+
+  sub accept_synced_event { return 1; }
+}
+
+{
+
   package _TestConn;
 
-  sub new {
-    return bless {sent_messages => []}, shift;
-  }
+  use Moo;
+
+  has sent_messages => (is => 'ro', reader => '_sent_messages', default => sub { [] });
+
+  no Moo;
 
   sub send {
     my ($self, $message) = @_;
@@ -260,16 +327,20 @@ sub _decode_http_json_body {
     my ($self) = @_;
     return $self->{sent_messages};
   }
+
 }
 
 {
 
   package _TestWriteHandle;
 
-  sub TIEHANDLE {
-    my ($class, %args) = @_;
-    return bless {writes => $args{writes} || []}, $class;
-  }
+  use Moo;
+
+  has writes => (is => 'ro', default => sub { [] });
+
+  no Moo;
+
+  sub TIEHANDLE { return shift->new(@_); }
 
   sub WRITE {
     my ($self) = @_;
