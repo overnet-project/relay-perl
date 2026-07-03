@@ -11,7 +11,7 @@ use IPC::Open3   qw(open3);
 use MIME::Base64 qw(encode_base64);
 use POSIX        qw(WNOHANG);
 use Symbol       qw(gensym);
-use Test::More;
+use Test2::V0;
 use Time::HiRes qw(sleep time);
 
 use Net::Nostr::Client;
@@ -23,7 +23,7 @@ use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 use Overnet::Relay::Sync;
 
-my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
+my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server');
 my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 
@@ -247,7 +247,7 @@ sub _write_client_line {
 sub _assert_registration_prelude {
   my (%args) = @_;
 
-  is_deeply [
+  is [
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
@@ -501,9 +501,9 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     local_url       => $relay_b_url,
     subscription_id => 'relay-a-to-b-seed',
   );
-  is_deeply $initial_sync->{fetched_ids}, [sort map { $_->{id} } @seed_events],
+  is $initial_sync->{fetched_ids}, [sort map { $_->{id} } @seed_events],
     'relay B fetches the initial authoritative seed state through sync';
-  is_deeply $initial_sync->{unresolved_ids}, [],
+  is $initial_sync->{unresolved_ids}, [],
     'relay B resolves the full initial authoritative seed state through sync';
 
   my $key_path    = File::Spec->catfile($tmpdir, 'irc-server-authority-relay-failover-key.pem');
@@ -544,7 +544,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     'runtime can register the real authoritative IRC adapter for failover coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -615,7 +615,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $join_bootstrap, 'joined client receives the initial authoritative bootstrap';
-  is_deeply $join_bootstrap,
+  is $join_bootstrap,
     [
     ":alice JOIN $channel",
     ":$server_name TOPIC $channel :Relay A Topic",
@@ -656,7 +656,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   );
   ok grep({ $_ eq $metadata_after->{id} } @{$recovery_sync->{fetched_ids} || []}),
     'relay A fetches the newer authoritative state during recovery sync';
-  is_deeply $recovery_sync->{unresolved_ids}, [], 'relay A resolves the full recovery sync set';
+  is $recovery_sync->{unresolved_ids}, [], 'relay A resolves the full recovery sync set';
 
   my @replay_lines;
   for (1 .. 8) {
@@ -691,7 +691,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $ban_lines, 'recovered authoritative state returns ban-list lines';
-  is_deeply $ban_lines,
+  is $ban_lines,
     [
     ":$server_name 367 alice $channel *!*\@* $server_name 0",
     ":$server_name 368 alice $channel :End of channel ban list",

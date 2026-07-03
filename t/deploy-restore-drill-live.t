@@ -15,7 +15,7 @@ use Net::Nostr::Key;
 use Overnet::Core::Nostr;
 use POSIX  qw(WNOHANG);
 use Symbol qw(gensym);
-use Test::More;
+use Test2::V0;
 use Time::HiRes qw(sleep time);
 
 our $CURRENT_IRC_LOG    = '';
@@ -172,7 +172,7 @@ sub _write_client_line {
 sub _assert_registration_prelude {
   my (%args) = @_;
 
-  is_deeply [
+  is [
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
@@ -277,10 +277,9 @@ my $project_root = File::Spec->catdir($code_root,    '..');
 my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
 my $relay_backup_script            = File::Spec->catfile($code_root, 'bin', 'overnet-relay-backup.pl');
-my $authority_relay_service_script = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-authority-relay-service.pl');
-my $irc_service_script             = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-service.pl');
+my $irc_command                    = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-server');
 
-ok -f $authority_relay_service_script, 'authoritative IRC relay service wrapper exists';
+ok -f $irc_command, 'IRC command exists';
 
 subtest 'backup-restored authoritative relay service plus fresh IRC service restores hosted channel state' => sub {
   my $dir                   = tempdir(CLEANUP => 1);
@@ -307,7 +306,7 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
   local $CURRENT_IRC_LOG    = $irc_log;
   local $CURRENT_IRC_HEALTH = $irc_health;
 
-  my $relay_proc = _spawn_process($^X, $authority_relay_service_script,
+  my $relay_proc = _spawn_process($^X, $irc_command, 'authority-relay-service',
     '--host',        '127.0.0.1',   '--port',     $relay_port, '--relay-url', $relay_url, '--store-file', $relay_store,
     '--health-file', $relay_health, '--log-file', $relay_log,);
 
@@ -384,7 +383,8 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     ok -f $relay_backup, 'relay backup command writes the backup file';
 
     $relay_proc = _spawn_process(
-      $^X,            $authority_relay_service_script, '--host',        '127.0.0.1',
+      $^X,            $irc_command,                    'authority-relay-service',
+      '--host',       '127.0.0.1',
       '--port',       $relay_port,                     '--relay-url',   $relay_url,
       '--store-file', $relay_backup,                   '--health-file', $restored_relay_health,
       '--log-file',   $restored_relay_log,
@@ -427,7 +427,8 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       'restored authoritative relay retains the operator metadata edit';
 
     my $irc_proc = _spawn_process(
-      $^X,                                  $irc_service_script,
+      $^X,                                  $irc_command,
+      'service',
       '--adapter-id',                       'irc.deploy.restore',
       '--network',                          $network,
       '--listen-host',                      '127.0.0.1',

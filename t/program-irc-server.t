@@ -25,7 +25,7 @@ use Overnet::Core::Nostr;
 use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 
-my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
+my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server');
 my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', '..', 'spec', 'fixtures', 'irc');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
@@ -1141,7 +1141,7 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
     'runtime can register the real IRC adapter for nick-collision coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -1313,7 +1313,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'runtime can register the real IRC adapter for compatibility coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -1630,7 +1630,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     'runtime can register the real IRC adapter for the program';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2207,7 +2207,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
     'runtime can register the real IRC adapter for direct-message coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2404,7 +2404,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
     'runtime can register the real IRC adapter for E2EE direct-message coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2621,7 +2621,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
     'runtime can register the real IRC adapter for the TLS server program';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2765,7 +2765,7 @@ subtest 'IRC server program drops TLS handshakes on the plain listener without e
     'runtime can register the real IRC adapter for the plain listener TLS probe';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -2920,7 +2920,7 @@ subtest 'IRC server program uses authoritative hosted-channel state for moderate
     'runtime can register the mock authoritative adapter';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -3270,7 +3270,7 @@ subtest 'IRC server program authenticates authoritative clients through SASL NOS
     'runtime can register the mock authoritative adapter for SASL coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -3488,7 +3488,7 @@ subtest 'IRC server program uses the real IRC adapter for authoritative NIP-29 c
   }
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -3806,7 +3806,7 @@ subtest 'IRC server program rejects non-member JOIN on a closed authoritative ch
   }
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -4061,7 +4061,7 @@ subtest 'IRC server program admits an invited user to a closed authoritative cha
   }
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -4381,7 +4381,7 @@ if (_run_program_irc_server_group('relay')) {
       'runtime can register the real authoritative IRC adapter for SASL relay coverage';
 
     my $host = Overnet::Program::Host->new(
-      command     => [$^X, $program_path],
+      command     => [$^X, $program_path, q{server}],
       runtime     => $runtime,
       program_id  => 'overnet.program.irc_server',
       permissions => [
@@ -4721,7 +4721,7 @@ if (_run_program_irc_server_group('relay')) {
         "$args{name} runtime can register the real authoritative IRC adapter";
 
       my $host = Overnet::Program::Host->new(
-        command     => [$^X, $program_path],
+        command     => [$^X, $program_path, q{server}],
         runtime     => $runtime,
         program_id  => 'overnet.program.irc_server',
         permissions => [
@@ -5788,7 +5788,7 @@ if (_run_program_irc_server_group('relay')) {
         "$args{name} runtime can register the real authoritative IRC adapter";
 
       my $host = Overnet::Program::Host->new(
-        command     => [$^X, $program_path],
+        command     => [$^X, $program_path, q{server}],
         runtime     => $runtime,
         program_id  => 'overnet.program.irc_server',
         permissions => [
@@ -6319,7 +6319,7 @@ if (_run_program_irc_server_group('relay')) {
         "$args{name} runtime can register the real authoritative IRC adapter";
 
       my $host = Overnet::Program::Host->new(
-        command     => [$^X, $program_path],
+        command     => [$^X, $program_path, q{server}],
         runtime     => $runtime,
         program_id  => 'overnet.program.irc_server',
         permissions => [
@@ -6750,7 +6750,7 @@ if (_run_program_irc_server_group('relay')) {
         "$args{name} runtime can register the real authoritative IRC adapter";
 
       my $host = Overnet::Program::Host->new(
-        command     => [$^X, $program_path],
+        command     => [$^X, $program_path, q{server}],
         runtime     => $runtime,
         program_id  => 'overnet.program.irc_server',
         permissions => [
@@ -7315,7 +7315,7 @@ if (_run_program_irc_server_group('relay')) {
         "$args{name} runtime can register the real authoritative IRC adapter";
 
       my $host = Overnet::Program::Host->new(
-        command     => [$^X, $program_path],
+        command     => [$^X, $program_path, q{server}],
         runtime     => $runtime,
         program_id  => 'overnet.program.irc_server',
         permissions => [
@@ -7708,9 +7708,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
 subtest 'IRC program entrypoints do not import Net::Nostr directly' => sub {
   my @paths = (
     File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'lib', 'Overnet', 'Program', 'IRC', 'Server.pm',),
-    File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-local-server.pl',),
-    File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl',),
-    File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-chat-client.pl',),
+    File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server',),
   );
 
   for my $path (@paths) {

@@ -1,6 +1,6 @@
 use strictures 2;
 use AnyEvent;
-use Test::More;
+use Test2::V0;
 use JSON ();
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -20,7 +20,7 @@ use Net::Nostr::Key;
 use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 
-my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server.pl');
+my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server');
 my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 my $relay_backup_script        = File::Spec->catfile($FindBin::Bin, '..', 'bin', 'overnet-relay-backup.pl');
@@ -256,7 +256,7 @@ sub _write_client_line {
 sub _assert_registration_prelude {
   my (%args) = @_;
 
-  is_deeply [
+  is [
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
     _read_client_line($args{client}, $args{timeout_ms}),
@@ -460,7 +460,7 @@ subtest 'IRC server survives live authoritative relay restart without replaying 
     'runtime can register the real authoritative IRC adapter for relay-restart coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -579,7 +579,7 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $join_bootstrap, 'joined client receives the initial authoritative bootstrap';
-  is_deeply $join_bootstrap,
+  is $join_bootstrap,
     [
     ":alice JOIN $channel",
     ":$server_name TOPIC $channel :Before restart",
@@ -775,7 +775,7 @@ subtest 'IRC server rebuilds authoritative channel state from persisted relay hi
     'runtime can register the real authoritative IRC adapter for relay persistence coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -894,7 +894,7 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $join_bootstrap, 'joined client receives the persisted authoritative bootstrap';
-  is_deeply $join_bootstrap,
+  is $join_bootstrap,
     [
     ":alice JOIN $channel",
     ":$server_name TOPIC $channel :Persisted topic",
@@ -914,7 +914,7 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $ban_lines, 'persisted authoritative ban-list query returns lines after relay restart';
-  is_deeply $ban_lines,
+  is $ban_lines,
     [
     ":$server_name 367 alice $channel *!*\@blocked.example $server_name 0",
     ":$server_name 368 alice $channel :End of channel ban list",
@@ -1058,7 +1058,7 @@ subtest 'IRC server rebuilds authoritative channel state from backup-restored re
     'runtime can register the real authoritative IRC adapter for backup coverage';
 
   my $host = Overnet::Program::Host->new(
-    command     => [$^X, $program_path],
+    command     => [$^X, $program_path, q{server}],
     runtime     => $runtime,
     program_id  => 'overnet.program.irc_server',
     permissions => [
@@ -1177,7 +1177,7 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $join_bootstrap, 'joined client receives the restored authoritative bootstrap';
-  is_deeply $join_bootstrap,
+  is $join_bootstrap,
     [
     ":alice JOIN $channel",
     ":$server_name TOPIC $channel :Backed Up Topic",
@@ -1208,7 +1208,7 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     timeout_ms      => $relay_propagation_timeout_ms,
   );
   ok $ban_lines, 'restored authoritative ban-list query returns lines';
-  is_deeply $ban_lines,
+  is $ban_lines,
     [
     ":$server_name 367 alice $channel *!*\@blocked.example $server_name 0",
     ":$server_name 368 alice $channel :End of channel ban list",

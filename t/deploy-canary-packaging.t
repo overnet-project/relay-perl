@@ -2,7 +2,7 @@ use strictures 2;
 
 use File::Spec;
 use FindBin;
-use Test::More;
+use Test2::V0;
 
 sub _slurp {
   my ($path) = @_;
@@ -16,7 +16,7 @@ my $code_root    = File::Spec->catdir($FindBin::Bin, '..');
 my $project_root = File::Spec->catdir($code_root,    '..');
 my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
-my $authority_relay_service_script = File::Spec->catfile($irc_root, 'bin', 'overnet-irc-authority-relay-service.pl');
+my $irc_command = File::Spec->catfile($irc_root, 'bin', 'overnet-irc-server');
 my $relay_sync_unit      = File::Spec->catfile($code_root, 'deploy', 'systemd', 'overnet-relay-sync@.service');
 my $relay_sync_timer     = File::Spec->catfile($code_root, 'deploy', 'systemd', 'overnet-relay-sync@.timer');
 my $authority_relay_unit = File::Spec->catfile($irc_root,  'deploy', 'systemd', 'overnet-irc-authority-relay@.service');
@@ -39,7 +39,7 @@ my $relay_b_env =
   File::Spec->catfile($irc_root, 'deploy', 'canary', 'relay-b', 'overnet-irc-authority-relay.env.example');
 my $irc_env = File::Spec->catfile($irc_root, 'deploy', 'canary', 'irc', 'overnet-irc.env.example');
 
-ok -f $authority_relay_service_script, 'authoritative IRC relay service wrapper exists';
+ok -f $irc_command,                    'IRC command exists';
 ok -f $relay_sync_unit,                'templated relay-sync systemd unit exists';
 ok -f $relay_sync_timer,               'templated relay-sync systemd timer exists';
 ok -f $authority_relay_unit,           'templated authoritative relay unit exists';
@@ -64,14 +64,14 @@ my $sync_timer_text = _slurp($relay_sync_timer);
 like $sync_timer_text, qr/OnUnitActiveSec=/mx, 'relay-sync timer defines a recurring interval';
 
 my $authority_relay_unit_text = _slurp($authority_relay_unit);
-like $authority_relay_unit_text, qr/ExecStart=.*overnet-irc-authority-relay-service\.pl/mx,
+like $authority_relay_unit_text, qr/ExecStart=.*overnet-irc-server\s+authority-relay-service/mx,
   'authoritative relay unit runs the authority relay service wrapper';
 like $authority_relay_unit_text, qr/EnvironmentFile=.*overnet-irc-authority-relay\.env/mx,
   'authoritative relay unit uses an env file';
 like $authority_relay_unit_text, qr/--health-file/mx, 'authoritative relay unit configures a health file';
 
 my $templated_irc_unit_text = _slurp($templated_irc_unit);
-like $templated_irc_unit_text, qr/ExecStart=.*overnet-irc-service\.pl/mx,
+like $templated_irc_unit_text, qr/ExecStart=.*overnet-irc-server\s+service/mx,
   'templated IRC unit runs the IRC service wrapper';
 like $templated_irc_unit_text, qr/EnvironmentFile=.*overnet-irc\.env/mx, 'templated IRC unit uses an env file';
 

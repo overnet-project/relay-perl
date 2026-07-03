@@ -8,7 +8,7 @@ use IPC::Open3 qw(open3);
 use JSON       ();
 use POSIX      qw(WNOHANG);
 use Symbol     qw(gensym);
-use Test::More;
+use Test2::V0;
 use Time::HiRes qw(sleep time);
 
 sub _free_port {
@@ -105,7 +105,7 @@ my $project_root = File::Spec->catdir($code_root,    '..');
 my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
 my $relay_service_script = File::Spec->catfile($code_root, 'bin', 'overnet-relay-service.pl');
-my $irc_service_script   = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-service.pl');
+my $irc_command          = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-server');
 
 subtest 'relay service wrapper writes health and logs' => sub {
   my $dir         = tempdir(CLEANUP => 1);
@@ -141,7 +141,8 @@ subtest 'IRC service wrapper writes health logs and TLS material' => sub {
   my $tls_private_key_file = File::Spec->catfile($dir, 'tls-key.pem');
 
   my $proc = _spawn_process(
-    $^X,                   $irc_service_script,     '--adapter-id',       'irc.deploy.test',
+    $^X,                   $irc_command,            'service',
+    '--adapter-id',        'irc.deploy.test',
     '--network',           'deploynet',             '--listen-host',      '127.0.0.1',
     '--listen-port',       $port,                   '--server-name',      'irc.deploy.test',
     '--signing-key-file',  $signing_key_file,       '--group-host',       'groups.deploy.test',

@@ -1,5 +1,5 @@
 use strictures 2;
-use Test::More;
+use Test2::V0;
 use File::Spec;
 use File::Temp qw(tempdir tempfile);
 use FindBin;
@@ -16,7 +16,7 @@ use Symbol      qw(gensym);
 use Time::HiRes qw(sleep time);
 
 my $program_repo   = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
-my $program_path   = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server.pl');
+my $program_path   = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server');
 my $irc_lib        = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $code_lib       = File::Spec->catdir($FindBin::Bin, '..', 'lib');
 my $code_local_lib = File::Spec->catdir($FindBin::Bin, '..', 'local', 'lib', 'perl5');
@@ -350,7 +350,7 @@ $runtime->register_adapter_definition(
 ) or die "register adapter failed\n";
 
 my $host = Overnet::Program::Host->new(
-  command     => [ $^X, $ENV{OVERNET_PROGRAM_PATH} ],
+  command     => [ $^X, $ENV{OVERNET_PROGRAM_PATH}, 'server' ],
   runtime     => $runtime,
   program_id  => 'overnet.program.irc_server',
   permissions => [

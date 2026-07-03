@@ -5,20 +5,15 @@ use FindBin;
 
 my $perl         = $^X;
 my $program_repo = File::Spec->catdir($FindBin::Bin, '..', '..', 'irc-server');
+my $command      = File::Spec->catfile($program_repo, 'bin', 'overnet-irc-server');
 my $local_server_module =
   File::Spec->catfile($program_repo, 'lib', 'Overnet', 'Program', 'IRC', 'Script', 'LocalServer.pm');
-my @scripts = (
-  File::Spec->catfile($program_repo, 'bin', 'overnet-irc-local-server.pl'),
-  File::Spec->catfile($program_repo, 'bin', 'overnet-irc-chat-client.pl'),
-);
 
-for my $script (@scripts) {
-  ok(-f $script, "$script exists");
-  my $status = system($perl, '-c', $script);
-  is($status, 0, "$script compiles");
-}
+ok(-f $command, "$command exists");
+my $status = system($perl, '-c', $command);
+is($status, 0, "$command compiles");
 
-my $server_help = qx{$perl $scripts[0] --help};
+my $server_help = qx{$perl $command local-server --help};
 like($server_help, qr/--tls\b/mx,                 'local server help advertises TLS support');
 like($server_help, qr/--tls-cert-chain-file\b/mx, 'local server help advertises TLS certificate support');
 
@@ -34,7 +29,7 @@ like(
 );
 unlike($server_source, qr/%23overnet/mx, 'local server does not percent-encode the HexChat channel hash');
 
-my $client_help = qx{$perl $scripts[1] --help};
+my $client_help = qx{$perl $command chat-client --help};
 like($client_help, qr/--tls\b/mx,           'local client help advertises TLS support');
 like($client_help, qr/--tls-no-verify\b/mx, 'local client help advertises local self-signed TLS support');
 

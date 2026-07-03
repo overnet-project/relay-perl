@@ -4,7 +4,7 @@ use File::Spec;
 use FindBin;
 use IPC::Open3 qw(open3);
 use Symbol     qw(gensym);
-use Test::More;
+use Test2::V0;
 
 sub _run_help {
   my (@command) = @_;
@@ -37,14 +37,14 @@ my $project_root = File::Spec->catdir($code_root,    '..');
 my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
 my $relay_service_script = File::Spec->catfile($code_root, 'bin',    'overnet-relay-service.pl');
-my $irc_service_script   = File::Spec->catfile($irc_root,  'bin',    'overnet-irc-service.pl');
+my $irc_command          = File::Spec->catfile($irc_root,  'bin',    'overnet-irc-server');
 my $relay_unit           = File::Spec->catfile($code_root, 'deploy', 'systemd', 'overnet-relay.service');
 my $relay_env            = File::Spec->catfile($code_root, 'deploy', 'systemd', 'overnet-relay.env.example');
 my $irc_unit             = File::Spec->catfile($irc_root,  'deploy', 'systemd', 'overnet-irc.service');
 my $irc_env              = File::Spec->catfile($irc_root,  'deploy', 'systemd', 'overnet-irc.env.example');
 
 ok -f $relay_service_script, 'relay service wrapper exists';
-ok -f $irc_service_script,   'IRC service wrapper exists';
+ok -f $irc_command,          'IRC command exists';
 ok -f $relay_unit,           'relay systemd unit exists';
 ok -f $relay_env,            'relay environment example exists';
 ok -f $irc_unit,             'IRC systemd unit exists';
@@ -57,7 +57,7 @@ like $relay_help->{stdout}, qr/--log-file\b/mx,       'relay service wrapper exp
 like $relay_help->{stdout}, qr/--store-file\b/mx,     'relay service wrapper exposes --store-file';
 like $relay_help->{stdout}, qr/--service-policy\b/mx, 'relay service wrapper exposes service-policy controls';
 
-my $irc_help = _run_help($^X, $irc_service_script);
+my $irc_help = _run_help($^X, $irc_command, 'service');
 is $irc_help->{exit_code}, 0, 'IRC service wrapper help exits cleanly';
 like $irc_help->{stdout}, qr/--health-file\b/mx, 'IRC service wrapper exposes --health-file';
 like $irc_help->{stdout}, qr/--log-file\b/mx,    'IRC service wrapper exposes --log-file';
@@ -72,7 +72,7 @@ like $relay_unit_text, qr/--health-file/mx,                         'relay unit 
 like $relay_unit_text, qr/--log-file/mx,                            'relay unit configures a log file';
 
 my $irc_unit_text = _slurp($irc_unit);
-like $irc_unit_text, qr/ExecStart=.*overnet-irc-service\.pl/mx, 'IRC unit runs the IRC service wrapper';
+like $irc_unit_text, qr/ExecStart=.*overnet-irc-server\s+service/mx, 'IRC unit runs the IRC service wrapper';
 like $irc_unit_text, qr/EnvironmentFile=.*overnet-irc\.env/mx,  'IRC unit uses an environment file';
 like $irc_unit_text, qr/--health-file/mx,                       'IRC unit configures a health file';
 like $irc_unit_text, qr/--log-file/mx,                          'IRC unit configures a log file';
