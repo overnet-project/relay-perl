@@ -27,6 +27,7 @@ subtest 'Moo constructors preserve hashref argument compatibility' => sub {
   );
   ok $relay->isa('Overnet::Relay'), 'relay constructed';
   is $relay->name,         'Hashref Relay', 'relay received Overnet args';
+  is $relay->relay_url,    'ws://relay.example.test', 'relay received Net::Nostr args';
   is $relay->core_version, '0.1.0',         'relay defaults still applied';
 
   my $deploy = Overnet::Relay::Deploy->new(
@@ -52,9 +53,10 @@ subtest 'Moo constructors preserve hashref argument compatibility' => sub {
   is $sync->timeout_seconds, 5, 'relay sync defaults still applied';
 
   my $dir   = tempdir(CLEANUP => 1);
-  my $store = Overnet::Relay::Store::File->new({path => "$dir/store.json"});
+  my $store = Overnet::Relay::Store::File->new({path => "$dir/store.json", max_events => 1});
   ok $store->isa('Overnet::Relay::Store::File'), 'file store constructed';
   is $store->path, "$dir/store.json", 'file store received path';
+  is $store->max_events, 1, 'file store received Net::Nostr args';
 
   my $error = eval {
     Overnet::Relay::Store::File->new;

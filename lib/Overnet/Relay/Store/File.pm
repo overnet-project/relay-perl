@@ -27,7 +27,7 @@ around new => sub {
     croak 'path is required';
   }
 
-  my $self = $class->SUPER::new(%args);
+  my $self = $class->SUPER::new(\%args);
   $self->path($path);
   $self->_load_from_disk;
   return $self;

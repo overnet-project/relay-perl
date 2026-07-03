@@ -97,7 +97,7 @@ around new => sub {
   $overnet_args{profile_contract_policy} = $overnet_args{_profile_contract_index}->policy;
   $overnet_args{profile_contracts}       = $overnet_args{_profile_contract_index}->contracts;
 
-  my $self = $class->SUPER::new(%args);
+  my $self = $class->SUPER::new(\%args);
   for my $field (@OVERNET_RELAY_FIELDS) {
     $self->$field($overnet_args{$field});
   }
