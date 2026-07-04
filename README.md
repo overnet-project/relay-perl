@@ -51,3 +51,7 @@ perl bin/overnet-release-gate.pl
 - [core-perl](https://github.com/overnet-project/core-perl)
 - [adapter-irc-perl](https://github.com/overnet-project/adapter-irc-perl)
 - [irc-server](https://github.com/overnet-project/irc-server)
+
+## AI Usage
+
+This code was developed in part with AI tooling such as Claude Code and Codex. We want to be upfront about that.
