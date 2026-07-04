@@ -5,7 +5,6 @@ bin/overnet-relay-sync.pl
 bin/overnet-relay.pl
 bin/overnet-release-gate.pl
 CLAUDE.md
-cpanfile
 deploy/canary/README.md
 deploy/canary/relay-sync-a-to-b/overnet-relay-sync.env.example
 deploy/canary/relay-sync-a-to-b/relay-sync.json.example

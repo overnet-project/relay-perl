@@ -8,7 +8,6 @@ on:
       - '.perlcriticrc'
       - '.perltidyrc'
       - 'bin/**'
-      - 'cpanfile'
       - 'deploy/**'
       - 'lib/**'
       - 'Makefile.PL'
@@ -21,7 +20,6 @@ on:
       - '.perlcriticrc'
       - '.perltidyrc'
       - 'bin/**'
-      - 'cpanfile'
       - 'deploy/**'
       - 'lib/**'
       - 'Makefile.PL'
@@ -79,7 +77,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/perl5
-          key: perl-${{ matrix.perl }}-${{ hashFiles('relay-perl/cpanfile', 'relay-perl/Makefile.PL', 'relay-perl/.github/workflows/test.yml') }}
+          key: perl-${{ matrix.perl }}-${{ hashFiles('relay-perl/Makefile.PL', 'relay-perl/.github/workflows/test.yml') }}
 
       - name: Install dependencies
         run: |

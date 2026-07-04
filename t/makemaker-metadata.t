@@ -43,7 +43,13 @@ is(
   'runtime prerequisites stay on top-level non-core distributions',
 );
 
-is($args->{TEST_REQUIRES} || {}, {}, 'no extra non-core test-only prerequisites',);
+is(
+  $args->{TEST_REQUIRES},
+  {
+    'AnyEvent::WebSocket::Client' => 0,
+  },
+  'test-only prerequisites are declared in Makefile.PL',
+);
 
 is(
   $args->{EXE_FILES},

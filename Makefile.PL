@@ -28,6 +28,9 @@ WriteMakefile(
     'URI'            => 0,
     'strictures'     => 2,
   },
+  TEST_REQUIRES => {
+    'AnyEvent::WebSocket::Client' => 0,
+  },
   EXE_FILES => [
     'bin/overnet-relay-backup.pl', 'bin/overnet-relay-service.pl',
     'bin/overnet-relay-sync.pl',   'bin/overnet-relay.pl',
