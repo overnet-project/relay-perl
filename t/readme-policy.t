@@ -14,7 +14,7 @@ sub _slurp {
 my $root = File::Spec->catdir($FindBin::Bin, '..', '..');
 
 my @readmes = (
-  File::Spec->catfile($root, '..',               'spec', 'README.md'),
+  File::Spec->catfile($root, 'spec',             'README.md'),
   File::Spec->catfile($root, 'core-perl',        'README.md'),
   File::Spec->catfile($root, 'relay-perl',       'README.md'),
   File::Spec->catfile($root, 'adapter-irc-perl', 'README.md'),

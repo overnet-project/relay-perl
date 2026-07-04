@@ -27,7 +27,7 @@ use Overnet::Program::Runtime;
 
 my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server');
 my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
-my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', '..', 'spec', 'fixtures', 'irc');
+my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', 'spec', 'fixtures', 'irc');
 my $authoritative_relay_script = File::Spec->catfile($FindBin::Bin, 'authoritative-nip29-relay.pl');
 my $program_irc_server_group   = $ENV{OVERNET_IRC_SERVER_GROUP} || 'base';
 
