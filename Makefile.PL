@@ -1,4 +1,5 @@
-use strictures 2;
+use strict;
+use warnings;
 
 use ExtUtils::MakeMaker;
 
@@ -16,7 +17,6 @@ WriteMakefile(
   MIN_PERL_VERSION   => '5.040',
   CONFIGURE_REQUIRES => {
     'ExtUtils::MakeMaker' => 0,
-    'strictures'          => 2,
   },
   PREREQ_PM => {
     'AnyEvent'       => 0,
