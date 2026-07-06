@@ -76,6 +76,62 @@ subtest 'NIP-11 info includes Overnet metadata' => sub {
   is $body->{overnet}{limits}{max_negentropy_sessions}, 4, 'overnet limits expose negentropy session limit';
 };
 
+subtest 'volunteer-basic applies enforced default limits matching what it advertises' => sub {
+  my $relay = Overnet::Relay->new(
+    relay_url               => 'ws://relay.example.test',
+    profile_contract_policy => 'off',
+  );
+  is $relay->relay_profile, 'volunteer-basic', 'defaults to volunteer-basic profile';
+
+  # The NIP-11 document advertises these limits, so they must actually be set
+  # (and therefore enforced) rather than only appearing as advertised fallbacks.
+  is $relay->max_subscriptions,  32,    'default max_subscriptions is set';
+  is $relay->max_limit,          100,   'default max_limit is set';
+  is $relay->default_limit,      100,   'default request limit is set';
+  is $relay->max_message_length, 65536, 'default max_message_length is set';
+
+  my $limits = $relay->relay_info->to_hash->{overnet}{limits};
+  is $limits->{max_subscriptions}, $relay->max_subscriptions,
+    'advertised max_subscriptions equals the enforced value';
+  is $limits->{max_filter_limit}, $relay->max_limit,
+    'advertised max_filter_limit equals the enforced value';
+  is $limits->{max_event_bytes}, $relay->max_message_length,
+    'advertised max_event_bytes equals the enforced value';
+};
+
+subtest 'operator-provided limits override the volunteer-basic defaults' => sub {
+  my $relay = Overnet::Relay->new(
+    relay_url               => 'ws://relay.example.test',
+    profile_contract_policy => 'off',
+    max_subscriptions       => 5,
+    max_limit               => 20,
+    max_message_length      => 1024,
+  );
+  is $relay->max_subscriptions,  5,    'operator max_subscriptions preserved';
+  is $relay->max_limit,          20,   'operator max_limit preserved';
+  is $relay->max_message_length, 1024, 'operator max_message_length preserved';
+};
+
+subtest 'volunteer-basic actually enforces the default request limit' => sub {
+  my $relay = Overnet::Relay->new(
+    relay_url               => 'ws://relay.example.test',
+    profile_contract_policy => 'off',
+  );
+  $relay->_connections({1 => _TestConn->new});
+  $relay->_subscriptions({1 => {}});
+  $relay->_authenticated({1 => {}});
+  $relay->_rate_state({});
+  $relay->_neg_sessions({1 => {}});
+  $relay->_sub_by_kind({});
+  $relay->_sub_no_kind({});
+
+  # A REQ whose filter declares no limit must be bounded rather than returning
+  # the entire store.
+  my $filter = Net::Nostr::Filter->new(kinds => [7800]);
+  $relay->_handle_req(1, 'sub-unbounded', $filter);
+  is $filter->limit, 100, 'an unbounded filter is capped to the default limit';
+};
+
 my $author      = Net::Nostr::Key->new;
 my $valid_event = _create_overnet_event(
   key         => $author,

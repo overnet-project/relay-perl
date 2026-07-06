@@ -101,9 +101,34 @@ around new => sub {
   for my $field (@OVERNET_RELAY_FIELDS) {
     $self->$field($overnet_args{$field});
   }
+  $self->_apply_profile_limit_defaults;
   $self->relay_info($self->_build_relay_info_document);
   return $self;
 };
+
+# Safe bounded defaults for the volunteer-basic profile (relay spec 4.3). These
+# match the values the NIP-11 information document advertises, so a relay that
+# advertises a limit actually enforces it rather than only appearing to.
+my %VOLUNTEER_BASIC_LIMIT_DEFAULTS = (
+  max_subscriptions  => 32,
+  max_limit          => 100,
+  default_limit      => 100,
+  max_message_length => 65_536,
+);
+
+sub _apply_profile_limit_defaults {
+  my ($self) = @_;
+  if (($self->relay_profile // q{}) ne 'volunteer-basic') {
+    return;
+  }
+
+  for my $attr (sort keys %VOLUNTEER_BASIC_LIMIT_DEFAULTS) {
+    if (!defined $self->$attr) {
+      $self->$attr($VOLUNTEER_BASIC_LIMIT_DEFAULTS{$attr});
+    }
+  }
+  return;
+}
 
 no Moo;
 
