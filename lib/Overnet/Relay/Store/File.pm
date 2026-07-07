@@ -16,6 +16,13 @@ our $VERSION = '0.001';
 
 my $JSON = JSON->new->utf8->canonical;
 
+# Persistence is an append-structured log so that storing N events costs O(N)
+# total instead of O(N^2): each accepted event or deletion appends one record
+# rather than rewriting the whole store. The log is periodically compacted back
+# to one record per live event so the file stays bounded under churn.
+my $COMPACT_MIN_RECORDS = 128;
+my $COMPACT_LIVE_FACTOR = 2;
+
 has path => (is => 'rw');
 
 around new => sub {
@@ -29,6 +36,8 @@ around new => sub {
 
   my $self = $class->SUPER::new(\%args);
   $self->path($path);
+  $self->{_records_on_disk} = 0;
+  $self->{_needs_rewrite}   = 0;
   $self->_load_from_disk;
   return $self;
 };
@@ -46,7 +55,7 @@ sub store {
   my ($self, $event) = @_;
   my $stored = Net::Nostr::RelayStore::store($self, $event);
   if ($stored) {
-    $self->_persist_to_disk;
+    $self->_persist_record([q{+}, $event->to_hash]);
   }
   return $stored;
 }
@@ -55,7 +64,7 @@ sub delete_by_id {
   my ($self, $id) = @_;
   my $deleted = Net::Nostr::RelayStore::delete_by_id($self, $id);
   if ($deleted) {
-    $self->_persist_to_disk;
+    $self->_persist_record([q{-}, $id]);
   }
   return $deleted;
 }
@@ -63,7 +72,7 @@ sub delete_by_id {
 sub clear {
   my ($self) = @_;
   Net::Nostr::RelayStore::clear($self);
-  $self->_persist_to_disk;
+  $self->_compact_to_disk;
   return 1;
 }
 
@@ -76,8 +85,7 @@ sub _load_from_disk {
 
   open my $fh, '<:raw', $path
     or croak "Can't open relay store file $path for reading: $OS_ERROR";
-  local $INPUT_RECORD_SEPARATOR = undef;
-  my $raw = <$fh>;
+  my $raw = do { local $INPUT_RECORD_SEPARATOR = undef; <$fh> };
   close $fh
     or croak "Can't close relay store file $path after reading: $OS_ERROR";
 
@@ -85,42 +93,120 @@ sub _load_from_disk {
     return 1;
   }
 
-  my $decoded;
-  my $loaded = eval {
-    $decoded = $JSON->decode($raw);
-    1;
-  };
-  if (!$loaded) {
-    croak "Invalid relay store file $path: $EVAL_ERROR";
-  }
-  if (ref($decoded) ne 'ARRAY') {
-    croak "Relay store file $path must contain an array";
-  }
-
-  for my $wire (@{$decoded}) {
-    if (ref($wire) ne 'HASH') {
+  my @lines   = split /\n/mxs, $raw;
+  my $records = 0;
+  for my $index (0 .. $#lines) {
+    my $line = $lines[$index];
+    if (!length $line) {
       next;
     }
-    my $event = Net::Nostr::Event->from_wire($wire);
-    Net::Nostr::RelayStore::store($self, $event);
+
+    my $decoded;
+    my $ok = eval {
+      $decoded = $JSON->decode($line);
+      1;
+    };
+    if (!$ok) {
+
+      # A torn final line can result from a crash mid-append; tolerate it but
+      # treat any earlier undecodable line as genuine corruption.
+      if ($index == $#lines) {
+        next;
+      }
+      croak "Invalid relay store file $path: $EVAL_ERROR";
+    }
+
+    $records += $self->_replay_record($path, $decoded);
   }
 
+  $self->{_records_on_disk} = $records;
+
+  # The on-disk log may hold the legacy single-array format, superseded
+  # records, or tombstones. Leave the file untouched for read-only consumers
+  # (for example the backup tool) and normalize it on the first mutation.
+  $self->{_needs_rewrite} = $records ? 1 : 0;
   return 1;
 }
 
-sub _persist_to_disk {
-  my ($self) = @_;
-  my $path   = $self->{path};
-  my $dir    = dirname($path);
-
-  if (!-d $dir) {
-    make_path($dir);
+sub _replay_record {
+  my ($self, $path, $decoded) = @_;
+  if (ref($decoded) ne 'ARRAY') {
+    croak "Relay store file $path must contain array records";
   }
+
+  my $tag = $decoded->[0];
+  if (!@{$decoded} || ref($tag) eq 'HASH') {
+
+    # Legacy format: one line holding the full array of wire events.
+    my $count = 0;
+    for my $wire (@{$decoded}) {
+      if (ref($wire) ne 'HASH') {
+        next;
+      }
+      Net::Nostr::RelayStore::store($self, Net::Nostr::Event->from_wire($wire));
+      $count++;
+    }
+    return $count;
+  }
+  if (!ref($tag) && $tag eq q{+} && ref($decoded->[1]) eq 'HASH') {
+    Net::Nostr::RelayStore::store($self, Net::Nostr::Event->from_wire($decoded->[1]));
+    return 1;
+  }
+  if (!ref($tag) && $tag eq q{-} && defined $decoded->[1] && !ref($decoded->[1])) {
+    Net::Nostr::RelayStore::delete_by_id($self, $decoded->[1]);
+    return 1;
+  }
+
+  croak "Relay store file $path contains an unrecognized record";
+}
+
+sub _persist_record {
+  my ($self, $entry) = @_;
+
+  # A store loaded from a legacy or churned log is normalized on first write:
+  # a single full rewrite replaces the whole file with one record per live
+  # event, after which further writes append.
+  if ($self->{_needs_rewrite}) {
+    return $self->_compact_to_disk;
+  }
+
+  $self->_append_record($entry);
+  $self->{_records_on_disk}++;
+
+  my $live = $self->event_count;
+  if ( $self->{_records_on_disk} >= $COMPACT_MIN_RECORDS
+    && $self->{_records_on_disk} >= $COMPACT_LIVE_FACTOR * ($live + 1)) {
+    $self->_compact_to_disk;
+  }
+  return 1;
+}
+
+sub _append_record {
+  my ($self, $entry) = @_;
+  my $path = $self->{path};
+  $self->_ensure_directory($path);
+
+  open my $fh, '>>:raw', $path
+    or croak "Can't open relay store file $path for appending: $OS_ERROR";
+  print {$fh} $JSON->encode($entry) . "\n"
+    or croak "Can't append to relay store file $path: $OS_ERROR";
+  close $fh
+    or croak "Can't close relay store file $path after appending: $OS_ERROR";
+  return 1;
+}
+
+sub _compact_to_disk {
+  my ($self) = @_;
+  my $path = $self->{path};
+  $self->_ensure_directory($path);
+
+  my @records = map { $JSON->encode([q{+}, $_->to_hash]) } @{$self->all_events || []};
+  my $payload = @records ? join("\n", @records) . "\n" : q{};
 
   my $tmp_path = $path . '.tmp.' . $PROCESS_ID;
   open my $fh, '>:raw', $tmp_path
     or croak "Can't open relay store temp file $tmp_path for writing: $OS_ERROR";
-  print {$fh} $JSON->encode([map { $_->to_hash } @{$self->all_events || []}])
+  print {$fh} $payload
     or croak "Can't write relay store temp file $tmp_path: $OS_ERROR";
   close $fh
     or croak "Can't close relay store temp file $tmp_path: $OS_ERROR";
@@ -128,6 +214,17 @@ sub _persist_to_disk {
   rename $tmp_path, $path
     or croak "Can't rename relay store temp file $tmp_path to $path: $OS_ERROR";
 
+  $self->{_records_on_disk} = scalar @records;
+  $self->{_needs_rewrite}   = 0;
+  return 1;
+}
+
+sub _ensure_directory {
+  my ($self, $path) = @_;
+  my $dir = dirname($path);
+  if (!-d $dir) {
+    make_path($dir);
+  }
   return 1;
 }
 
@@ -147,8 +244,13 @@ Version 0.001.
 
 =head1 DESCRIPTION
 
-Persists relay events to a canonical JSON file while preserving the
-L<Net::Nostr::RelayStore> API.
+Persists relay events to disk while preserving the L<Net::Nostr::RelayStore>
+API. Persistence is append-structured: each accepted event or deletion appends
+one JSON-lines record rather than rewriting the whole store, so ingesting N
+events costs O(N) total instead of O(N^2). The log is compacted back to one
+record per live event once it outgrows the live set, keeping the file bounded
+under churn. The legacy single-JSON-array format is still read, and is
+normalized to the record log on the first subsequent write.
 
 =head1 SUBROUTINES/METHODS
 
@@ -162,15 +264,15 @@ Returns the configured store path.
 
 =head2 store
 
-Stores an event and persists the store if the event was accepted.
+Stores an event and appends a persistence record if the event was accepted.
 
 =head2 delete_by_id
 
-Deletes an event and persists the store if an event was removed.
+Deletes an event and appends a tombstone record if an event was removed.
 
 =head2 clear
 
-Clears the store and persists the empty state.
+Clears the store and rewrites the persisted state as empty.
 
 =head1 DIAGNOSTICS
 
