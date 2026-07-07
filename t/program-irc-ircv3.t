@@ -1,5 +1,6 @@
 use strictures 2;
 use Test::More;
+use Digest::SHA qw(hmac_sha256_hex);
 use File::Spec;
 use FindBin;
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
@@ -154,6 +155,8 @@ qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z\ :irc\.example\.test\ 001\
   socketpair(my $alice_server_sock, my $alice_client_sock, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
     or die "socketpair failed: $!";
   my $server = Overnet::Program::IRC::Server->new;
+  $server->{config} = {cloak_secret => 'ircv3-account-notify-cloak-secret'};
+  my $bob_cloak = substr(hmac_sha256_hex('127.0.0.1', 'ircv3-account-notify-cloak-secret'), 0, 16) . '.users.overnet';
   $server->{clients}{1} = {
     id           => 1,
     registered   => 1,
@@ -198,8 +201,8 @@ qr/\A\@time=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z\ :irc\.example\.test\ 001\
   ok($read, 'account-notify payload is readable');
   is(
     $buffer,
-    ':bob!bob@127.0.0.1 ACCOUNT ' . ('b' x 64) . "\r\n",
-    'shared channel peers receive ACCOUNT login notifications',
+    ":bob!bob\@$bob_cloak ACCOUNT " . ('b' x 64) . "\r\n",
+    'shared channel peers receive ACCOUNT login notifications with a cloaked host',
   );
 }
 

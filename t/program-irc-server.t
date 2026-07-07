@@ -9,6 +9,7 @@ use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL        qw(SSL_VERIFY_NONE);
 use IO::Socket::SSL::Utils qw(CERT_create PEM_cert2file PEM_key2file);
+use Digest::SHA            qw(hmac_sha256_hex);
 use IPC::Open3             qw(open3);
 use MIME::Base64           qw(decode_base64 encode_base64);
 use POSIX                  qw(WNOHANG);
@@ -1434,17 +1435,21 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
     'TOPIC without a target returns 461';
 
   _write_client_line($alice, 'USERHOST aLiCe');
-  is _read_client_line($alice, 1_000), ':overnet.irc.local 302 Alice :Alice=+alice@127.0.0.1',
-    'USERHOST uses folded nick lookup and returns a minimal 302 reply';
+  my $userhost_line = _read_client_line($alice, 1_000);
+  like $userhost_line,
+    qr/\A:overnet[.]irc[.]local\ 302\ Alice\ :Alice=[+]alice\@[0-9a-f]{16}[.]users[.]overnet\z/mx,
+    'USERHOST uses folded nick lookup and returns a cloaked host';
+  unlike $userhost_line, qr/127[.]0[.]0[.]1/mx, 'USERHOST does not leak the raw client IP';
+  my ($cloak_host) = $userhost_line =~ /\@([0-9a-f]{16}[.]users[.]overnet)\z/mx;
 
   _write_client_line($alice, 'WHOIS aLiCe');
   is [_read_client_lines($alice, 3, 1_000),],
     [
-    ':overnet.irc.local 311 Alice Alice alice 127.0.0.1 * :Alice Example',
+    ":overnet.irc.local 311 Alice Alice alice $cloak_host * :Alice Example",
     ':overnet.irc.local 312 Alice Alice overnet.irc.local :Overnet IRC',
     ':overnet.irc.local 318 Alice Alice :End of /WHOIS list.',
     ],
-    'WHOIS uses folded nick lookup and returns minimal WHOIS replies';
+    'WHOIS uses folded nick lookup and returns minimal WHOIS replies with the same cloaked host';
 
   _write_client_line($alice, 'FROB');
   is _read_client_line($alice, 1_000), ':overnet.irc.local 421 Alice FROB :Unknown command',
@@ -1528,10 +1533,10 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
   _write_client_line($alice, 'WHO #oVERnEt');
   is [_read_client_lines($alice, 2, 1_000),],
     [
-    ':overnet.irc.local 352 Alice #OverNet alice 127.0.0.1 overnet.irc.local Alice H :0 Alice Example',
+    ":overnet.irc.local 352 Alice #OverNet alice $cloak_host overnet.irc.local Alice H :0 Alice Example",
     ':overnet.irc.local 315 Alice #OverNet :End of /WHO list.',
     ],
-    'WHO query uses folded channel lookup and returns minimal WHO replies';
+    'WHO query uses folded channel lookup and returns minimal WHO replies with the same cloaked host';
 
   _write_client_line($alice, 'PRIVMSG #oVERnEt :Casefolded hello');
   ok $host->pump_until(
@@ -7216,7 +7221,14 @@ if (_run_program_irc_server_group('relay')) {
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-ban-a.irc.local';
     my $server_name_b                = 'overnet-ban-b.irc.local';
-    my $bob_mask                     = 'bob!bob@127.0.0.1';
+
+    # Both instances share one cloak secret so a given client IP resolves to the
+    # same cloaked host on each, which is what makes a host-mask ban enforceable
+    # across instances. Bob joins from loopback, so his observed mask carries the
+    # cloak of 127.0.0.1 rather than the raw address.
+    my $cloak_secret = 'shared-authoritative-ban-cloak-secret';
+    my $bob_cloak    = substr(hmac_sha256_hex('127.0.0.1', $cloak_secret), 0, 16) . '.users.overnet';
+    my $bob_mask     = "bob!bob\@$bob_cloak";
 
     my $alice_key    = Net::Nostr::Key->new;
     my $bob_key      = Net::Nostr::Key->new;
@@ -7293,6 +7305,7 @@ if (_run_program_irc_server_group('relay')) {
           listen_port      => 0,
           server_name      => $args{server_name},
           signing_key_file => $key_path,
+          cloak_secret     => $cloak_secret,
           adapter_config   => {
             network           => $network,
             authority_profile => 'nip29',
