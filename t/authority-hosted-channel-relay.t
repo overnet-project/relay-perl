@@ -578,4 +578,101 @@ subtest 'concurrent session grants survive replaceable grant storage' => sub {
   ok $accepted_b, 'control event under the stored grant accepted' or diag $reason_b;
 };
 
+sub _seed_banned_channel {
+  my ($relay, %args) = @_;
+  my @ban_tags = map { ['ban', $_] } @{$args{ban_masks} || []};
+  $relay->store->store(
+    _snapshot_event(
+      signer_key => $snapshot_key,
+      kind       => 39_000,
+      extra_tags => [@ban_tags, ($args{closed} ? (['closed']) : ())],
+    )
+  );
+  return;
+}
+
+sub _join_request {
+  my (%args) = @_;
+  my $grant = _grant_event(
+    actor_key       => $args{actor_key},
+    delegate_pubkey => $args{session_key}->pubkey_hex,
+  );
+  $args{relay}->store->store($grant);
+  return _control_event(
+    kind         => 9_021,
+    session_key  => $args{session_key},
+    actor_pubkey => $args{actor_key}->pubkey_hex,
+    authority_id => $grant->id,
+    created_at   => $BASE_TIME + 20,
+    extra_tags   => $args{mask_tags},
+  );
+}
+
+subtest 'a join request whose IRC mask matches an active ban is rejected' => sub {
+  my $relay = _relay(snapshot_pubkeys => [$snapshot_key->pubkey_hex]);
+  _seed_banned_channel($relay, ban_masks => ['baduser!*@*']);
+
+  my ($accepted, $reason) = _authorize(
+    $relay,
+    _join_request(
+      relay       => $relay,
+      actor_key   => $attacker_key,
+      session_key => $attacker_session_key,
+      mask_tags   => [['overnet_irc_mask', 'baduser!x@host.example']],
+    )
+  );
+  ok !$accepted, 'banned mask join rejected';
+  like $reason, qr/unauthorized:\ actor\ is\ banned\ from\ the\ group/mx, 'ban rejection reason';
+};
+
+subtest 'a join request omitting its IRC mask is rejected while bans are active' => sub {
+  my $relay = _relay(snapshot_pubkeys => [$snapshot_key->pubkey_hex]);
+  _seed_banned_channel($relay, ban_masks => ['baduser!*@*']);
+
+  my ($accepted, $reason) = _authorize(
+    $relay,
+    _join_request(
+      relay       => $relay,
+      actor_key   => $attacker_key,
+      session_key => $attacker_session_key,
+      mask_tags   => [],
+    )
+  );
+  ok !$accepted, 'maskless join rejected when bans are active';
+  like $reason, qr/unauthorized:\ join\ request\ must\ assert\ an\ IRC\ mask\ while\ bans\ are\ active/mx,
+    'fail-closed rejection reason';
+};
+
+subtest 'a join request omitting its IRC mask is accepted when no bans are active' => sub {
+  my $relay = _relay(snapshot_pubkeys => [$snapshot_key->pubkey_hex]);
+  _seed_banned_channel($relay, ban_masks => []);
+
+  my ($accepted, $reason) = _authorize(
+    $relay,
+    _join_request(
+      relay       => $relay,
+      actor_key   => $attacker_key,
+      session_key => $attacker_session_key,
+      mask_tags   => [],
+    )
+  );
+  ok $accepted, 'maskless join accepted on an unbanned open channel' or diag $reason;
+};
+
+subtest 'a join request with a non-matching IRC mask is accepted' => sub {
+  my $relay = _relay(snapshot_pubkeys => [$snapshot_key->pubkey_hex]);
+  _seed_banned_channel($relay, ban_masks => ['baduser!*@*']);
+
+  my ($accepted, $reason) = _authorize(
+    $relay,
+    _join_request(
+      relay       => $relay,
+      actor_key   => $attacker_key,
+      session_key => $attacker_session_key,
+      mask_tags   => [['overnet_irc_mask', 'gooduser!x@host.example']],
+    )
+  );
+  ok $accepted, 'non-matching mask join accepted (relay mask bans are best-effort)' or diag $reason;
+};
+
 done_testing;

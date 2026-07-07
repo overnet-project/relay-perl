@@ -395,8 +395,14 @@ sub _authorize_join_request {
     return _accept();
   }
 
-  my %tags = _first_tag_values($event->tags);
-  if (_irc_mask_is_banned($state->{ban_masks}, $tags{overnet_irc_mask})) {
+  my %tags       = _first_tag_values($event->tags);
+  my $actor_mask = $tags{overnet_irc_mask};
+  my $has_bans   = @{$state->{ban_masks} || []}                                    ? 1 : 0;
+  my $valid_mask = defined $actor_mask && !ref($actor_mask) && length($actor_mask) ? 1 : 0;
+  if ($has_bans && !$valid_mask) {
+    return _reject('unauthorized: join request must assert an IRC mask while bans are active');
+  }
+  if (_irc_mask_is_banned($state->{ban_masks}, $actor_mask)) {
     return _reject('unauthorized: actor is banned from the group');
   }
 
@@ -1070,6 +1076,14 @@ the bound group has no durable members yet (the hosted-channel creation
 bootstrap); delegated 39000 events are rejected for tombstoned groups. When
 no snapshot identity is configured, snapshot-kind events without a verified
 delegation are rejected.
+
+The C<overnet_irc_mask> tag on a C<9021> join request is asserted by the
+publisher, so relay-side C<+b> mask-ban enforcement is best-effort: this relay
+cannot observe the joining client's real IRC mask. To close the trivial
+evasion of simply omitting the mask, a join request to a group that has any
+active ban mask is rejected unless it carries a well-formed non-empty
+C<overnet_irc_mask>. The authoritative, non-evadable exclusion mechanism
+remains C<9001> pubkey removal on a C<closed> channel.
 
 =head1 SUBROUTINES/METHODS
 
