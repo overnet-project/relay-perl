@@ -13,7 +13,8 @@ use Net::Nostr::Relay;
 use Overnet::Authority::HostedChannel ();
 use Overnet::Relay::Store::File;
 
-my %AUTHORITATIVE_CONTROL_KIND = map { $_ => 1 } (9_000,  9_001,  9_002,  9_009, 9_021, 9_022);
+my %AUTHORITATIVE_CONTROL_KIND = map { $_ => 1 } (9_000, 9_001, 9_002, 9_009, 9_021, 9_022);
+my %GROUP_SNAPSHOT_KIND        = map { $_ => 1 } (39_000, 39_001, 39_002, 39_003);
 my %GROUP_EVENT_KIND           = map { $_ => 1 } (39_000, 39_001, 39_002, 9_000, 9_001, 9_002, 9_009, 9_021, 9_022);
 my %EVENT_SORT_RANK            = (
   39_000 => 0,
@@ -40,17 +41,24 @@ sub build_authoritative_relay {
   if (defined $args{store_file} && (ref($args{store_file}) || $args{store_file} eq q{})) {
     croak 'store_file must be a non-empty string';
   }
+  my $snapshot_signers = _snapshot_signer_set($args{snapshot_pubkeys});
 
   my $relay;
+  my %retained_grants;
   my %relay_args = (
     relay_url => $args{relay_url},
     on_event  => sub {
       my ($event) = @_;
+      if ($event->kind == 0 + $args{grant_kind}) {
+        _retain_grant(\%retained_grants, $event);
+      }
       return _authorize_event(
-        relay      => $relay,
-        relay_url  => $args{relay_url},
-        grant_kind => 0 + $args{grant_kind},
-        event      => $event,
+        relay            => $relay,
+        relay_url        => $args{relay_url},
+        grant_kind       => 0 + $args{grant_kind},
+        snapshot_signers => $snapshot_signers,
+        retained_grants  => \%retained_grants,
+        event            => $event,
       );
     },
   );
@@ -65,8 +73,30 @@ sub build_authoritative_relay {
   return $relay;
 }
 
+sub _snapshot_signer_set {
+  my ($snapshot_pubkeys) = @_;
+  if (!defined $snapshot_pubkeys) {
+    return {};
+  }
+  if (ref($snapshot_pubkeys) ne 'ARRAY') {
+    croak 'snapshot_pubkeys must be an array of 64-char lowercase hex pubkeys';
+  }
+  for my $pubkey (@{$snapshot_pubkeys}) {
+    if (!_valid_pubkey($pubkey)) {
+      croak 'snapshot_pubkeys must be an array of 64-char lowercase hex pubkeys';
+    }
+  }
+
+  return {map { $_ => 1 } @{$snapshot_pubkeys}};
+}
+
 sub _authorize_event {
   my (%args) = @_;
+
+  if ($GROUP_SNAPSHOT_KIND{$args{event}->kind}) {
+    return _authorize_snapshot_event(%args);
+  }
+
   my $context = _authorization_context(%args);
 
   if (!$context->{control_event}) {
@@ -76,9 +106,15 @@ sub _authorize_event {
     return _reject($context->{rejection});
   }
 
+  my $grant_rejection = _verify_delegation_grant($context);
+  if (defined $grant_rejection) {
+    return _reject($grant_rejection);
+  }
+
   my $state = _derive_group_state(
-    relay    => $context->{relay},
-    group_id => $context->{group_id},
+    relay            => $context->{relay},
+    group_id         => $context->{group_id},
+    snapshot_signers => $context->{snapshot_signers},
   );
 
   if ($state->{tombstoned}) {
@@ -101,6 +137,48 @@ sub _authorize_event {
   return _authorize_operator_action($context, $state);
 }
 
+sub _authorize_snapshot_event {
+  my (%args) = @_;
+  my $event = $args{event};
+
+  if ($args{snapshot_signers}{$event->pubkey}) {
+    return _accept();
+  }
+  if ($event->kind != 39_000) {
+    return _reject('unauthorized: group snapshots require an authoritative snapshot identity');
+  }
+
+  my %tags     = _first_tag_values($event->tags);
+  my $group_id = $tags{d};
+  if (!(defined $group_id && !ref($group_id) && length($group_id))) {
+    return _reject('invalid: authoritative group metadata events require one d tag');
+  }
+
+  my $context = _delegated_context(%args, group_id => $group_id);
+  if (defined $context->{rejection}) {
+    return _reject($context->{rejection});
+  }
+  my $grant_rejection = _verify_delegation_grant($context);
+  if (defined $grant_rejection) {
+    return _reject($grant_rejection);
+  }
+
+  my $state = _derive_group_state(
+    relay            => $context->{relay},
+    group_id         => $context->{group_id},
+    snapshot_signers => $context->{snapshot_signers},
+  );
+
+  if ($state->{tombstoned}) {
+    return _reject('unauthorized: group is tombstoned');
+  }
+  if (!keys %{$state->{members}}) {
+    return _accept();
+  }
+
+  return _authorize_operator_action($context, $state);
+}
+
 sub _authorization_context {
   my (%args) = @_;
   my $event  = $args{event};
@@ -115,6 +193,14 @@ sub _authorization_context {
   if (!(defined $group_id && !ref($group_id) && length($group_id))) {
     return _rejected_context('invalid: authoritative NIP-29 control events require one h tag');
   }
+
+  return _delegated_context(%args, group_id => $group_id);
+}
+
+sub _delegated_context {
+  my (%args) = @_;
+  my $event  = $args{event};
+  my %tags   = _first_tag_values($event->tags);
 
   my $actor_pubkey = $tags{overnet_actor};
   if (!_valid_pubkey($actor_pubkey)) {
@@ -131,14 +217,81 @@ sub _authorization_context {
   }
 
   return {
-    control_event => 1,
-    relay         => $args{relay},
-    event         => $event,
-    kind          => $kind,
-    group_id      => $group_id,
-    actor_pubkey  => $actor_pubkey,
-    authority_id  => $authority_id,
+    control_event    => 1,
+    relay            => $args{relay},
+    relay_url        => $args{relay_url},
+    grant_kind       => $args{grant_kind},
+    snapshot_signers => $args{snapshot_signers},
+    retained_grants  => $args{retained_grants},
+    event            => $event,
+    kind             => $event->kind,
+    group_id         => $args{group_id},
+    actor_pubkey     => $actor_pubkey,
+    authority_id     => $authority_id,
   };
+}
+
+sub _retain_grant {
+  my ($retained_grants, $grant) = @_;
+
+  # Prune only grants that are expired against both the wall clock and the
+  # incoming event's logical time, so a forged future created_at cannot
+  # evict live grants and replayed histories keep their grant index.
+  my $prune_before = time;
+  if ($grant->created_at < $prune_before) {
+    $prune_before = $grant->created_at;
+  }
+  for my $grant_id (keys %{$retained_grants}) {
+    my %tags       = _first_tag_values($retained_grants->{$grant_id}->tags);
+    my $expires_at = $tags{expires_at};
+    if (defined $expires_at && !ref($expires_at) && $expires_at =~ /\A\d+\z/mxs && $expires_at < $prune_before) {
+      delete $retained_grants->{$grant_id};
+    }
+  }
+
+  $retained_grants->{$grant->id} = $grant;
+  return 1;
+}
+
+sub _verify_delegation_grant {
+  my ($context) = @_;
+  my $grant = ($context->{retained_grants} || {})->{$context->{authority_id}}
+    || $context->{relay}->store->get_by_id($context->{authority_id});
+  if (!$grant) {
+    return 'unauthorized: delegation grant is not known to this relay';
+  }
+  if ($grant->kind != $context->{grant_kind}) {
+    return 'unauthorized: delegation grant uses the wrong event kind';
+  }
+  if ($grant->pubkey ne $context->{actor_pubkey}) {
+    return 'unauthorized: delegation grant is not signed by the effective actor';
+  }
+
+  my %tags = _first_tag_values($grant->tags);
+  if (!(defined $tags{delegate} && !ref($tags{delegate}) && $tags{delegate} eq $context->{event}->pubkey)) {
+    return 'unauthorized: delegation grant does not delegate to the event signer';
+  }
+  if (!(defined $tags{relay} && !ref($tags{relay}) && $tags{relay} eq $context->{relay_url})) {
+    return 'unauthorized: delegation grant is bound to a different relay';
+  }
+  for my $required_tag (qw(server session)) {
+    if (!(defined $tags{$required_tag} && !ref($tags{$required_tag}) && length($tags{$required_tag}))) {
+      return 'unauthorized: delegation grant is missing required tags';
+    }
+  }
+  my $expires_at = $tags{expires_at};
+  if (
+    !(
+         defined $expires_at
+      && !ref($expires_at)
+      && $expires_at =~ /\A\d+\z/mxs
+      && $context->{event}->created_at <= $expires_at
+    )
+  ) {
+    return 'unauthorized: delegation grant has expired';
+  }
+
+  return;
 }
 
 sub _rejected_context {
@@ -178,9 +331,10 @@ sub _authorize_leave_request {
   if (
     $state->{members}{$context->{actor_pubkey}}
     || _actor_membership_state(
-      relay    => $context->{relay},
-      group_id => $context->{group_id},
-      actor    => $context->{actor_pubkey},
+      relay            => $context->{relay},
+      group_id         => $context->{group_id},
+      snapshot_signers => $context->{snapshot_signers},
+      actor            => $context->{actor_pubkey},
     )
   ) {
     return _accept();
@@ -270,7 +424,7 @@ sub _derive_group_state {
   my (%args) = @_;
   my $state = _new_group_state();
 
-  for my $event (_group_events($args{relay}, $args{group_id})) {
+  for my $event (_group_events($args{relay}, $args{group_id}, $args{snapshot_signers})) {
     _apply_group_state_event($state, $event);
   }
 
@@ -484,7 +638,7 @@ sub _actor_membership_state {
     tombstoned => 0,
   };
 
-  for my $event (_group_events($args{relay}, $args{group_id})) {
+  for my $event (_group_events($args{relay}, $args{group_id}, $args{snapshot_signers})) {
     _apply_actor_membership_event($state, $event);
   }
 
@@ -610,11 +764,11 @@ sub _apply_actor_leave_event {
 }
 
 sub _group_events {
-  my ($relay, $group_id) = @_;
+  my ($relay, $group_id, $snapshot_signers) = @_;
   my @events;
 
   for my $event (@{$relay->store->all_events || []}) {
-    if (_event_belongs_to_group($event, $group_id)) {
+    if (_event_belongs_to_group($event, $group_id, $snapshot_signers)) {
       push @events, $event;
     }
   }
@@ -630,9 +784,17 @@ sub _group_events {
 }
 
 sub _event_belongs_to_group {
-  my ($event, $group_id) = @_;
+  my ($event, $group_id, $snapshot_signers) = @_;
   if (!$GROUP_EVENT_KIND{$event->kind}) {
     return 0;
+  }
+  if ($GROUP_SNAPSHOT_KIND{$event->kind} && !($snapshot_signers || {})->{$event->pubkey}) {
+    if ($event->kind != 39_000) {
+      return 0;
+    }
+    if (!_event_has_delegation_shape($event)) {
+      return 0;
+    }
   }
 
   my %tags = _first_tag_values($event->tags);
@@ -644,6 +806,15 @@ sub _event_belongs_to_group {
   }
 
   return 0;
+}
+
+sub _event_has_delegation_shape {
+  my ($event) = @_;
+  my %tags = _first_tag_values($event->tags);
+  return
+       _valid_pubkey($tags{overnet_actor})
+    && _valid_pubkey($tags{overnet_authority})
+    && $event->pubkey ne $tags{overnet_actor} ? 1 : 0;
 }
 
 sub _compare_group_event_pairs {
@@ -873,8 +1044,9 @@ Version 0.001.
 =head1 SYNOPSIS
 
   my $relay = build_authoritative_relay(
-    relay_url  => 'ws://127.0.0.1:7777',
-    grant_kind => 30000,
+    relay_url        => 'ws://127.0.0.1:7777',
+    grant_kind       => 14142,
+    snapshot_pubkeys => ['0f' x 32],
   );
 
 =head1 DESCRIPTION
@@ -882,11 +1054,31 @@ Version 0.001.
 Builds a relay with NIP-29 hosted-channel authorization rules for Overnet IRC
 authority operation.
 
+Control events (kinds 9000, 9001, 9002, 9009, 9021, and 9022) are accepted
+only when their C<overnet_authority> tag resolves to a delegation grant event
+stored at this relay that has the configured grant kind, is signed by the
+event's C<overnet_actor> pubkey, delegates to the event's signing pubkey, is
+bound to this relay's URL, carries C<server> and C<session> tags, and is
+unexpired at the control event's C<created_at>.
+
+Group snapshot events of kinds 39001, 39002, and 39003 are accepted, and
+folded into derived authoritative group state, only when signed by one of the
+configured C<snapshot_pubkeys>. Kind 39000 group metadata is additionally
+accepted as a delegated authoritative write under the same grant verification
+as control events, when the effective actor is a current channel operator or
+the bound group has no durable members yet (the hosted-channel creation
+bootstrap); delegated 39000 events are rejected for tombstoned groups. When
+no snapshot identity is configured, snapshot-kind events without a verified
+delegation are rejected.
+
 =head1 SUBROUTINES/METHODS
 
 =head2 build_authoritative_relay
 
-Creates a relay configured with hosted-channel authorization hooks.
+Creates a relay configured with hosted-channel authorization hooks. Accepts
+C<relay_url>, C<grant_kind>, optional C<store> or C<store_file>, and optional
+C<snapshot_pubkeys> (an array reference of 64-character lowercase hex pubkeys
+allowed to sign authoritative group snapshots).
 
 =head1 DIAGNOSTICS
 

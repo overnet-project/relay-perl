@@ -50,6 +50,7 @@ sub _spawn_authoritative_nip29_relay {
     $args{port},                 '--relay-url',
     $args{relay_url},            '--grant-kind',
     14142, (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
+    (map { ('--snapshot-pubkey', $_) } @{$args{snapshot_pubkeys} || []}),
   );
 
   close $stdin;
@@ -362,14 +363,15 @@ subtest 'IRC server survives live authoritative relay restart without replaying 
   my $server_name                  = 'overnet-restart.irc.local';
   my $alice_key                    = Net::Nostr::Key->new;
   my $alice_pubkey                 = $alice_key->pubkey_hex;
+  my $seed_key                     = Net::Nostr::Key->new;
 
   my $relay = _spawn_authoritative_nip29_relay(
-    port      => $relay_port,
-    relay_url => $relay_url,
+    port             => $relay_port,
+    relay_url        => $relay_url,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $seed_key         = Net::Nostr::Key->new;
   my $sign_group_event = sub {
     my ($event) = @_;
     return $seed_key->create_event(
@@ -597,8 +599,9 @@ qr/\A:\Q$server_name\E\ NOTICE\ alice\ :OVERNETAUTH\ DELEGATE\ ([0-9a-f]{64})\ (
     'joined client still sees the cached authoritative topic while the relay is down';
 
   $relay = _spawn_authoritative_nip29_relay(
-    port      => $relay_port,
-    relay_url => $relay_url,
+    port             => $relay_port,
+    relay_url        => $relay_url,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
@@ -667,17 +670,18 @@ subtest 'IRC server rebuilds authoritative channel state from persisted relay hi
   my $server_name                  = 'overnet-persist.irc.local';
   my $alice_key                    = Net::Nostr::Key->new;
   my $alice_pubkey                 = $alice_key->pubkey_hex;
+  my $seed_key                     = Net::Nostr::Key->new;
   my $tmpdir                       = tempdir(CLEANUP => 1);
   my $store_file                   = File::Spec->catfile($tmpdir, 'authoritative-relay-store.json');
 
   my $relay = _spawn_authoritative_nip29_relay(
-    port       => $relay_port,
-    relay_url  => $relay_url,
-    store_file => $store_file,
+    port             => $relay_port,
+    relay_url        => $relay_url,
+    store_file       => $store_file,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $seed_key         = Net::Nostr::Key->new;
   my $sign_group_event = sub {
     my ($event) = @_;
     return $seed_key->create_event(
@@ -941,18 +945,19 @@ subtest 'IRC server rebuilds authoritative channel state from backup-restored re
   my $server_name                  = 'overnet-backup.irc.local';
   my $alice_key                    = Net::Nostr::Key->new;
   my $alice_pubkey                 = $alice_key->pubkey_hex;
+  my $seed_key                     = Net::Nostr::Key->new;
   my $tmpdir                       = tempdir(CLEANUP => 1);
   my $store_file                   = File::Spec->catfile($tmpdir, 'authoritative-relay-store.json');
   my $backup_file                  = File::Spec->catfile($tmpdir, 'authoritative-relay-store.backup.json');
 
   my $relay = _spawn_authoritative_nip29_relay(
-    port       => $relay_port,
-    relay_url  => $relay_url,
-    store_file => $store_file,
+    port             => $relay_port,
+    relay_url        => $relay_url,
+    store_file       => $store_file,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_url);
 
-  my $seed_key         = Net::Nostr::Key->new;
   my $sign_group_event = sub {
     my ($event) = @_;
     return $seed_key->create_event(

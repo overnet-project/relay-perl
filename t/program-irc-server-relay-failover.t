@@ -42,9 +42,10 @@ sub _free_port {
 }
 
 sub _spawn_authoritative_nip29_relay {
-  my (%args) = @_;
-  my $stderr = gensym();
-  my $pid    = open3(
+  my (%args)        = @_;
+  my $stderr        = gensym();
+  my @snapshot_args = map { ('--snapshot-pubkey', $_) } @{$args{snapshot_pubkeys} || []};
+  my $pid           = open3(
     my $stdin,                   my $stdout,
     $stderr,                     $^X,
     $authoritative_relay_script, '--host',
@@ -52,6 +53,7 @@ sub _spawn_authoritative_nip29_relay {
     $args{port},                 '--relay-url',
     $args{relay_url},            '--grant-kind',
     14142, (defined $args{store_file} ? ('--store-file', $args{store_file}) : ()),
+    @snapshot_args,
   );
 
   close $stdin;
@@ -431,20 +433,23 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   my $relay_a_store_file           = File::Spec->catfile($tmpdir, 'relay-a-store.json');
   my $relay_b_store_file           = File::Spec->catfile($tmpdir, 'relay-b-store.json');
 
+  my $seed_key = Net::Nostr::Key->new;
+
   my $relay_a = _spawn_authoritative_nip29_relay(
-    port       => $relay_a_port,
-    relay_url  => $relay_a_url,
-    store_file => $relay_a_store_file,
+    port             => $relay_a_port,
+    relay_url        => $relay_a_url,
+    store_file       => $relay_a_store_file,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   my $relay_b = _spawn_authoritative_nip29_relay(
-    port       => $relay_b_port,
-    relay_url  => $relay_b_url,
-    store_file => $relay_b_store_file,
+    port             => $relay_b_port,
+    relay_url        => $relay_b_url,
+    store_file       => $relay_b_store_file,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_a_url);
   _wait_for_authoritative_nip29_relay_ready($relay_b_url);
 
-  my $seed_key         = Net::Nostr::Key->new;
   my $sign_group_event = sub {
     my ($event) = @_;
     return $seed_key->create_event(
@@ -503,8 +508,7 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   );
   is $initial_sync->{fetched_ids}, [sort map { $_->{id} } @seed_events],
     'relay B fetches the initial authoritative seed state through sync';
-  is $initial_sync->{unresolved_ids}, [],
-    'relay B resolves the full initial authoritative seed state through sync';
+  is $initial_sync->{unresolved_ids}, [], 'relay B resolves the full initial authoritative seed state through sync';
 
   my $key_path    = File::Spec->catfile($tmpdir, 'irc-server-authority-relay-failover-key.pem');
   my $signing_key = Net::Nostr::Key->new;
@@ -643,9 +647,10 @@ subtest 'IRC server recovers authoritative state from a second live relay withou
   ok $published->{accepted}, 'relay B accepts the newer authoritative state while relay A is down';
 
   $relay_a = _spawn_authoritative_nip29_relay(
-    port       => $relay_a_port,
-    relay_url  => $relay_a_url,
-    store_file => $relay_a_store_file,
+    port             => $relay_a_port,
+    relay_url        => $relay_a_url,
+    store_file       => $relay_a_store_file,
+    snapshot_pubkeys => [$seed_key->pubkey_hex],
   );
   _wait_for_authoritative_nip29_relay_ready($relay_a_url);
 

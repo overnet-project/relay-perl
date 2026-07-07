@@ -276,8 +276,8 @@ my $code_root    = File::Spec->catdir($FindBin::Bin, '..');
 my $project_root = File::Spec->catdir($code_root,    '..');
 my $irc_root     = File::Spec->catdir($project_root, 'irc-server');
 
-my $relay_backup_script            = File::Spec->catfile($code_root, 'bin', 'overnet-relay-backup.pl');
-my $irc_command                    = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-server');
+my $relay_backup_script = File::Spec->catfile($code_root, 'bin', 'overnet-relay-backup.pl');
+my $irc_command         = File::Spec->catfile($irc_root,  'bin', 'overnet-irc-server');
 
 ok -f $irc_command, 'IRC command exists';
 
@@ -306,9 +306,15 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
   local $CURRENT_IRC_LOG    = $irc_log;
   local $CURRENT_IRC_HEALTH = $irc_health;
 
-  my $relay_proc = _spawn_process($^X, $irc_command, 'authority-relay-service',
-    '--host',        '127.0.0.1',   '--port',     $relay_port, '--relay-url', $relay_url, '--store-file', $relay_store,
-    '--health-file', $relay_health, '--log-file', $relay_log,);
+  my $session_key = Net::Nostr::Key->new;
+
+  my $relay_proc = _spawn_process(
+    $^X,                   $irc_command,    'authority-relay-service', '--host',
+    '127.0.0.1',           '--port',        $relay_port,               '--relay-url',
+    $relay_url,            '--store-file',  $relay_store,              '--snapshot-pubkey',
+    $seed_key->pubkey_hex, '--health-file', $relay_health,             '--log-file',
+    $relay_log,
+  );
 
   eval {
     my $relay_ready = _wait_for_health($relay_health);
@@ -355,15 +361,31 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       created_at => 1_744_304_003,
       roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
     )->to_hash;
-    my $joined = $seed_key->create_event(
+    my $grant = $alice_key->create_event(
+      kind       => 14142,
+      created_at => 1_744_303_999,
+      content    => '',
+      tags       => [
+        ['relay',      $relay_url],
+        ['server',     "irc://$server_name/$network"],
+        ['delegate',   $session_key->pubkey_hex],
+        ['session',    'deploy-restore-session-1'],
+        ['expires_at', '1744400000'],
+      ],
+    )->to_hash;
+    my $joined = $session_key->create_event(
       kind       => 9021,
       created_at => 1_744_304_004,
       content    => '',
-      tags       =>
-        [['h', $group_id], ['overnet_actor', $alice_pubkey], ['overnet_authority', 'e' x 64], ['overnet_sequence', 2],],
+      tags       => [
+        ['h',                 $group_id],
+        ['overnet_actor',     $alice_pubkey],
+        ['overnet_authority', $grant->{id}],
+        ['overnet_sequence',  1],
+      ],
     )->to_hash;
 
-    for my $event ((map { $sign_group_event->($_) } ($metadata, $admins, $members, $roles)), $joined) {
+    for my $event ((map { $sign_group_event->($_) } ($metadata, $admins, $members, $roles)), $grant, $joined) {
       my $published = _publish_nostr_event_to_relay(
         relay_url => $relay_url,
         event     => $event,
@@ -383,16 +405,16 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
     ok -f $relay_backup, 'relay backup command writes the backup file';
 
     $relay_proc = _spawn_process(
-      $^X,            $irc_command,                    'authority-relay-service',
-      '--host',       '127.0.0.1',
-      '--port',       $relay_port,                     '--relay-url',   $relay_url,
-      '--store-file', $relay_backup,                   '--health-file', $restored_relay_health,
-      '--log-file',   $restored_relay_log,
+      $^X,                    $irc_command,        'authority-relay-service', '--host',
+      '127.0.0.1',            '--port',            $relay_port,               '--relay-url',
+      $relay_url,             '--store-file',      $relay_backup,             '--health-file',
+      $restored_relay_health, '--snapshot-pubkey', $seed_key->pubkey_hex,     '--log-file',
+      $restored_relay_log,
     );
     my $restored_ready = _wait_for_health($restored_relay_health);
     is $restored_ready->{details}{relay_url}, $relay_url, 'restored authoritative relay reports the same relay URL';
 
-    my $restored_metadata_edit = $seed_key->create_event(
+    my $restored_metadata_edit = $session_key->create_event(
       kind       => 9002,
       created_at => 1_744_304_010,
       content    => '',
@@ -402,8 +424,8 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
         ['topic',             'Service Restored Topic'],
         ['ban',               '*!*@blocked.example'],
         ['overnet_actor',     $alice_pubkey],
-        ['overnet_authority', 'e' x 64],
-        ['overnet_sequence',  1],
+        ['overnet_authority', $grant->{id}],
+        ['overnet_sequence',  2],
       ],
     )->to_hash;
     my $restored_metadata_publish = _publish_nostr_event_to_relay(
@@ -427,21 +449,21 @@ subtest 'backup-restored authoritative relay service plus fresh IRC service rest
       'restored authoritative relay retains the operator metadata edit';
 
     my $irc_proc = _spawn_process(
-      $^X,                                  $irc_command,
-      'service',
-      '--adapter-id',                       'irc.deploy.restore',
-      '--network',                          $network,
-      '--listen-host',                      '127.0.0.1',
-      '--listen-port',                      $irc_port,
-      '--server-name',                      $server_name,
-      '--signing-key-file',                 $signing_key_file,
-      '--group-host',                       $group_host,
-      '--channel-group',                    "$channel=$group_id",
-      '--authority-relay-url',              $relay_url,
-      '--authority-relay-poll-interval-ms', 50,
-      '--authority-relay-query-timeout-ms', 3_000,
-      '--health-file',                      $irc_health,
-      '--log-file',                         $irc_log,
+      $^X,                  $irc_command,
+      'service',            '--adapter-id',
+      'irc.deploy.restore', '--network',
+      $network,             '--listen-host',
+      '127.0.0.1',          '--listen-port',
+      $irc_port,            '--server-name',
+      $server_name,         '--signing-key-file',
+      $signing_key_file,    '--group-host',
+      $group_host,          '--channel-group',
+      "$channel=$group_id", '--authority-relay-url',
+      $relay_url,           '--authority-relay-poll-interval-ms',
+      50,                   '--authority-relay-query-timeout-ms',
+      3_000,                '--health-file',
+      $irc_health,          '--log-file',
+      $irc_log,
     );
     local $CURRENT_IRC_STDERR = $irc_proc->{stderr};
 

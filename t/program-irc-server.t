@@ -401,13 +401,14 @@ sub _free_port {
 }
 
 sub _spawn_authoritative_nip29_relay {
-  my (%args) = @_;
-  my $stderr = gensym();
-  my $pid    = open3(
+  my (%args)        = @_;
+  my $stderr        = gensym();
+  my @snapshot_args = map { ('--snapshot-pubkey', $_) } @{$args{snapshot_pubkeys} || []};
+  my $pid           = open3(
     my $stdin,                   my $stdout,    $stderr,          $^X,
     $authoritative_relay_script, '--host',      '127.0.0.1',      '--port',
     $args{port},                 '--relay-url', $args{relay_url}, '--grant-kind',
-    _authoritative_grant_kind(),
+    _authoritative_grant_kind(), @snapshot_args,
   );
 
   close $stdin;
@@ -4287,9 +4288,11 @@ if (_run_program_irc_server_group('relay')) {
     my $alice_key    = Net::Nostr::Key->new;
     my $alice_pubkey = $alice_key->pubkey_hex;
 
-    my $relay = _spawn_authoritative_nip29_relay(
-      port      => $relay_port,
-      relay_url => $relay_url,
+    my $seed_key = Net::Nostr::Key->new;
+    my $relay    = _spawn_authoritative_nip29_relay(
+      port             => $relay_port,
+      relay_url        => $relay_url,
+      snapshot_pubkeys => [$seed_key->pubkey_hex],
     );
     _wait_for_authoritative_nip29_relay_ready($relay_url);
 
@@ -4324,7 +4327,6 @@ if (_run_program_irc_server_group('relay')) {
         roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
       )->to_hash,
     );
-    my $seed_key = Net::Nostr::Key->new;
     @seed_events = map {
       $seed_key->create_event(
         kind       => $_->{kind},
@@ -4625,9 +4627,11 @@ if (_run_program_irc_server_group('relay')) {
     my $alice_pubkey = $alice_key->pubkey_hex;
     my $bob_pubkey   = $bob_key->pubkey_hex;
 
-    my $relay = _spawn_authoritative_nip29_relay(
-      port      => $relay_port,
-      relay_url => $relay_url,
+    my $seed_key = Net::Nostr::Key->new;
+    my $relay    = _spawn_authoritative_nip29_relay(
+      port             => $relay_port,
+      relay_url        => $relay_url,
+      snapshot_pubkeys => [$seed_key->pubkey_hex],
     );
     _wait_for_authoritative_nip29_relay_ready($relay_url);
 
@@ -4662,7 +4666,6 @@ if (_run_program_irc_server_group('relay')) {
         roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
       )->to_hash,
     );
-    my $seed_key = Net::Nostr::Key->new;
     @seed_events = map {
       $seed_key->create_event(
         kind       => $_->{kind},
@@ -7220,9 +7223,11 @@ if (_run_program_irc_server_group('relay')) {
     my $alice_pubkey = $alice_key->pubkey_hex;
     my $bob_pubkey   = $bob_key->pubkey_hex;
 
-    my $relay = _spawn_authoritative_nip29_relay(
-      port      => $relay_port,
-      relay_url => $relay_url,
+    my $seed_key = Net::Nostr::Key->new;
+    my $relay    = _spawn_authoritative_nip29_relay(
+      port             => $relay_port,
+      relay_url        => $relay_url,
+      snapshot_pubkeys => [$seed_key->pubkey_hex],
     );
     _wait_for_authoritative_nip29_relay_ready($relay_url);
 
@@ -7256,7 +7261,6 @@ if (_run_program_irc_server_group('relay')) {
         roles      => [{name => 'irc.operator'}, {name => 'irc.voice'},],
       )->to_hash,
     );
-    my $seed_key = Net::Nostr::Key->new;
     @seed_events = map {
       $seed_key->create_event(
         kind       => $_->{kind},
