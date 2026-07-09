@@ -779,14 +779,8 @@ sub _group_events {
     }
   }
 
-  my @decorated;
-  my $index = 0;
-  for my $event (@events) {
-    push @decorated, [$index, $event];
-    $index++;
-  }
-
-  return map { $_->[1] } sort { _compare_group_event_pairs($a, $b) } @decorated;
+  my @ordered = sort { _compare_group_events($a, $b) } @events;
+  return @ordered;
 }
 
 sub _event_belongs_to_group {
@@ -823,27 +817,29 @@ sub _event_has_delegation_shape {
     && $event->pubkey ne $tags{overnet_actor} ? 1 : 0;
 }
 
-sub _compare_group_event_pairs {
-  my ($first_pair, $second_pair) = @_;
-  my $created_order = $first_pair->[1]->created_at <=> $second_pair->[1]->created_at;
+sub _compare_group_events {
+  my ($first_event, $second_event) = @_;
+  my $created_order = $first_event->created_at <=> $second_event->created_at;
   if ($created_order) {
     return $created_order;
   }
 
-  my $sequence_order = _compare_event_sequence_for_sort($first_pair->[1], $second_pair->[1]);
-  if (defined $sequence_order) {
-    if (!$sequence_order) {
-      return $first_pair->[0] <=> $second_pair->[0];
-    }
+  # Preserve explicit per-session causal order only when it actually
+  # distinguishes the two events; an equal (or absent) sequence must fall
+  # through to the semantic phase and event-id tie-breaks below.
+  my $sequence_order = _compare_event_sequence_for_sort($first_event, $second_event);
+  if ($sequence_order) {
     return $sequence_order;
   }
 
-  my $rank_order = _event_sort_rank($first_pair->[1]) <=> _event_sort_rank($second_pair->[1]);
+  my $rank_order = _event_sort_rank($first_event) <=> _event_sort_rank($second_event);
   if ($rank_order) {
     return $rank_order;
   }
 
-  return $first_pair->[0] <=> $second_pair->[0];
+  # irc.md section 11.4: remaining ties MUST break by ascending lowercase Nostr
+  # event id, never by raw local input position.
+  return lc($first_event->id) cmp lc($second_event->id);
 }
 
 sub _compare_event_sequence_for_sort {

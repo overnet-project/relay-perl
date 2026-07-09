@@ -29,6 +29,7 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/authoritative-nip29-relay.pl
+t/authority-hosted-channel-derivation.t
 t/bin-syntax.t
 t/deploy-canary-packaging.t
 t/deploy-packaging.t
