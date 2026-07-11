@@ -26,6 +26,17 @@ use Overnet::Core::Nostr;
 use Overnet::Program::Host;
 use Overnet::Program::Runtime;
 
+# Devel::Cover slows this suite by more than an order of magnitude, so the
+# helper timeouts scale up when coverage instrumentation is loaded. Scaled
+# values only extend how long a wait is allowed to take; fast runs are
+# unaffected because every wait returns as soon as its condition holds.
+my $TIMEOUT_SCALE = $INC{'Devel/Cover.pm'} ? 30 : 1;
+
+sub _scaled_ms {
+  my ($ms) = @_;
+  return $ms * $TIMEOUT_SCALE;
+}
+
 my $program_path = File::Spec->catfile($FindBin::Bin, '..', '..', 'irc-server', 'bin', 'overnet-irc-server');
 my $irc_lib      = File::Spec->catdir($FindBin::Bin, '..', '..', 'adapter-irc-perl', 'lib');
 my $spec_irc_dir = File::Spec->catdir($FindBin::Bin, '..', '..', 'spec', 'fixtures', 'irc');
@@ -101,7 +112,7 @@ sub _wait_for_ready_details {
   my ($host) = @_;
 
   my $ready = $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       my ($current_host) = @_;
       for my $notification (@{$current_host->observed_notifications}) {
@@ -129,7 +140,7 @@ sub _wait_for_dm_subscription_count {
   my ($host, $count) = @_;
 
   return $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _request_count_matching($_[0]->transcript, 'from_program', 'subscriptions.open',
         sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
@@ -177,6 +188,7 @@ sub _connect_irc_client_tls {
 sub _read_client_line {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
+  $timeout_ms = _scaled_ms($timeout_ms);
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
@@ -231,6 +243,7 @@ sub _assert_registration_prelude {
 sub _read_client_line_optional {
   my ($client, $timeout_ms) = @_;
   my (undef, $caller_file, $caller_line) = caller;
+  $timeout_ms = _scaled_ms($timeout_ms);
 
   while ($client->{read_buffer} !~ /\n/mx) {
     my $selector = IO::Select->new($client->{socket});
@@ -503,7 +516,7 @@ sub _query_nostr_events_from_relay {
 sub _pump_hosts_until {
   my (%args)          = @_;
   my $hosts           = $args{hosts}           || [];
-  my $timeout_ms      = $args{timeout_ms}      || 1_000;
+  my $timeout_ms      = $args{timeout_ms}      || _scaled_ms(1_000);
   my $pump_timeout_ms = $args{pump_timeout_ms} || 50;
   my $condition       = $args{condition}       || sub {0};
   my $deadline        = time() + ($timeout_ms / 1000);
@@ -1162,8 +1175,8 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -1210,7 +1223,7 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
   _write_client_line($alice, 'NICK alice_');
   is _read_client_line($alice, 1_000), ':alice NICK :alice_', 'successful nick change is rendered back to the client';
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1234,7 +1247,7 @@ subtest 'IRC server program enforces nick uniqueness and emits 433 for collision
 
   _write_client_line($bob, 'QUIT :bye');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _request_count_matching($_[0]->transcript, 'from_program', 'subscriptions.close',
         sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
@@ -1334,8 +1347,8 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -1497,7 +1510,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
 
   _write_client_line($alice, 'JOIN #OverNet');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1540,7 +1553,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
 
   _write_client_line($alice, 'PRIVMSG #oVERnEt :Casefolded hello');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1562,7 +1575,7 @@ subtest 'IRC server program supports a minimal IRC client compatibility slice' =
 
   _write_client_line($alice, 'TOPIC #oVERnEt :Compatibility topic');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1655,8 +1668,8 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -1669,7 +1682,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     'ready health exposes the bound listen port';
 
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub { scalar(@{$runtime->adapter_session_ids}) == 1 },
     ),
     'program opens a long-lived IRC adapter session after startup';
@@ -1697,7 +1710,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
 
   _write_client_line($alice, 'JOIN #overnet');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1723,7 +1736,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
   };
   _write_client_line($alice, 'PRIVMSG #overnet :Hello from IRC!');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1746,7 +1759,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
 
   _write_client_line($bob, 'JOIN #overnet');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _count_emitted_items(
         $_[0]->runtime->emitted_items,
@@ -1763,7 +1776,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $alice,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':bob JOIN #overnet'],
     'joined clients receive later join lines',
@@ -1782,7 +1795,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
   };
   _write_client_line($bob, 'TOPIC #overnet :Overnet discussion and implementation');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1799,7 +1812,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $alice,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':bob TOPIC #overnet :Overnet discussion and implementation'],
     'alice receives subscription-driven TOPIC fanout',
@@ -1809,7 +1822,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $bob,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':bob TOPIC #overnet :Overnet discussion and implementation'],
     'bob receives subscription-driven TOPIC fanout',
@@ -1827,7 +1840,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
 
   _write_client_line($carol, 'JOIN #overnet');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _count_emitted_items(
         $_[0]->runtime->emitted_items,
@@ -1844,7 +1857,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $alice,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':carol JOIN #overnet'],
     'existing joined clients receive carol join lines',
@@ -1854,7 +1867,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $bob,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':carol JOIN #overnet'],
     'all joined clients receive carol join lines',
@@ -1874,7 +1887,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
   };
   _write_client_line($alice, 'NICK alice_');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1891,7 +1904,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $alice,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice NICK :alice_'],
     'alice receives her own NICK line',
@@ -1901,7 +1914,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $bob,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice NICK :alice_'],
     'bob receives alice nick change',
@@ -1911,7 +1924,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $carol,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice NICK :alice_'],
     'carol receives alice nick change',
@@ -1919,7 +1932,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
 
   _write_client_line($alice, 'PART #overnet :bye');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1936,7 +1949,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $alice,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice_ PART #overnet :bye'],
     'alice receives her own PART line',
@@ -1946,7 +1959,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $bob,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice_ PART #overnet :bye'],
     'remaining channel members receive PART lines',
@@ -1956,7 +1969,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $carol,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':alice_ PART #overnet :bye'],
     'all remaining channel members receive PART lines',
@@ -1964,7 +1977,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
 
   _write_client_line($bob, 'NOTICE #overnet :Only Bob now');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -1988,7 +2001,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $carol,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':bob NOTICE #overnet :Only Bob now'],
     'carol receives subscription-driven NOTICE fanout',
@@ -2001,7 +2014,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
   };
   _write_client_line($bob, 'QUIT :gone');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2018,14 +2031,14 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
       hosts      => [$host],
       client     => $carol,
       count      => 1,
-      timeout_ms => 1_000,
+      timeout_ms => _scaled_ms(1_000),
     ),
     [':bob QUIT :gone'],
     'remaining shared channel members receive QUIT lines',
   );
   is _read_client_line_optional($alice, 200), undef, 'parted clients do not receive later QUIT lines';
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _request_count_matching($_[0]->transcript, 'from_program', 'subscriptions.close',
         sub { (($_[0]{subscription_id} || '') =~ /\Adm:/mx) ? 1 : 0 },
@@ -2037,7 +2050,7 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
   _write_client_line($carol, 'PART #overnet :done');
   is _read_client_line($carol, 1_000), ':carol PART #overnet :done', 'carol receives her own final PART line';
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       _method_count($_[0]->transcript, 'from_program', 'request', 'subscriptions.close') >= 1
         && _count_emitted_items(
@@ -2232,8 +2245,8 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -2271,7 +2284,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
   };
   _write_client_line($alice, 'PRIVMSG bob :hello in private');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2294,7 +2307,7 @@ subtest 'IRC server program routes direct messages through directional chat.dm o
   };
   _write_client_line($bob, 'NOTICE alice :private notice');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2429,8 +2442,8 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -2523,7 +2536,7 @@ subtest 'IRC server program blind-routes endpoint-blind E2E direct messages for 
 
   _write_client_line($alice, 'PRIVMSG bob :' . $e2ee_body);
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2646,8 +2659,8 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -2671,7 +2684,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
 
   _write_client_line($client, 'JOIN #overnet');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2697,7 +2710,7 @@ subtest 'IRC server program accepts TLS clients using the baseline tls config sh
   };
   _write_client_line($client, 'PRIVMSG #overnet :Hello from TLS!');
   ok $host->pump_until(
-    timeout_ms => 1_000,
+    timeout_ms => _scaled_ms(1_000),
     condition  => sub {
       defined _find_emitted_item(
         $_[0]->runtime->emitted_items,
@@ -2790,8 +2803,8 @@ subtest 'IRC server program drops TLS handshakes on the plain listener without e
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -2948,8 +2961,8 @@ subtest 'IRC server program uses authoritative hosted-channel state for moderate
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -3298,8 +3311,8 @@ subtest 'IRC server program authenticates authoritative clients through SASL NOS
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -3517,8 +3530,8 @@ subtest 'IRC server program uses the real IRC adapter for authoritative NIP-29 c
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -3835,8 +3848,8 @@ subtest 'IRC server program rejects non-member JOIN on a closed authoritative ch
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -4090,8 +4103,8 @@ subtest 'IRC server program admits an invited user to a closed authoritative cha
       'overnet.emit_private_message' => {},
       'overnet.emit_capabilities'    => {},
     },
-    startup_timeout_ms  => 1_000,
-    shutdown_timeout_ms => 1_000,
+    startup_timeout_ms  => _scaled_ms(1_000),
+    shutdown_timeout_ms => _scaled_ms(1_000),
   );
 
   $host->start;
@@ -4417,8 +4430,8 @@ if (_run_program_irc_server_group('relay')) {
         'overnet.emit_private_message'     => {},
         'overnet.emit_capabilities'        => {},
       },
-      startup_timeout_ms  => 1_000,
-      shutdown_timeout_ms => 1_000,
+      startup_timeout_ms  => _scaled_ms(1_000),
+      shutdown_timeout_ms => _scaled_ms(1_000),
     );
 
     $host->start;
@@ -4758,8 +4771,8 @@ if (_run_program_irc_server_group('relay')) {
           'overnet.emit_private_message'     => {},
           'overnet.emit_capabilities'        => {},
         },
-        startup_timeout_ms  => 1_000,
-        shutdown_timeout_ms => 1_000,
+        startup_timeout_ms  => _scaled_ms(1_000),
+        shutdown_timeout_ms => _scaled_ms(1_000),
       );
 
       $host->start;
@@ -5368,7 +5381,7 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
         condition       => sub {
           my $relay_invites = _query_nostr_events_from_relay(
             relay_url  => $relay_url,
-            timeout_ms => 1_000,
+            timeout_ms => _scaled_ms(1_000),
             filters    => [
               {
                 kinds => [9009],
@@ -5825,8 +5838,8 @@ if (_run_program_irc_server_group('relay')) {
           'overnet.emit_private_message'     => {},
           'overnet.emit_capabilities'        => {},
         },
-        startup_timeout_ms  => 1_000,
-        shutdown_timeout_ms => 1_000,
+        startup_timeout_ms  => _scaled_ms(1_000),
+        shutdown_timeout_ms => _scaled_ms(1_000),
       );
 
       $host->start;
@@ -6356,8 +6369,8 @@ if (_run_program_irc_server_group('relay')) {
           'overnet.emit_private_message'     => {},
           'overnet.emit_capabilities'        => {},
         },
-        startup_timeout_ms  => 1_000,
-        shutdown_timeout_ms => 1_000,
+        startup_timeout_ms  => _scaled_ms(1_000),
+        shutdown_timeout_ms => _scaled_ms(1_000),
       );
 
       $host->start;
@@ -6787,8 +6800,8 @@ if (_run_program_irc_server_group('relay')) {
           'overnet.emit_private_message'     => {},
           'overnet.emit_capabilities'        => {},
         },
-        startup_timeout_ms  => 1_000,
-        shutdown_timeout_ms => 1_000,
+        startup_timeout_ms  => _scaled_ms(1_000),
+        shutdown_timeout_ms => _scaled_ms(1_000),
       );
 
       $host->start;
@@ -7361,8 +7374,8 @@ if (_run_program_irc_server_group('relay')) {
           'overnet.emit_private_message'     => {},
           'overnet.emit_capabilities'        => {},
         },
-        startup_timeout_ms  => 1_000,
-        shutdown_timeout_ms => 1_000,
+        startup_timeout_ms  => _scaled_ms(1_000),
+        shutdown_timeout_ms => _scaled_ms(1_000),
       );
 
       $host->start;
