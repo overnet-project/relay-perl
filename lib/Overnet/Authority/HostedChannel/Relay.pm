@@ -488,7 +488,9 @@ sub _apply_group_state_event {
 sub _apply_group_metadata_event {
   my ($state, $event) = @_;
   my %metadata = _metadata_from_tags($event->tags);
-  $state->{closed}     = $metadata{closed} ? 1 : 0;
+  $state->{closed} = $metadata{closed} ? 1 : 0;
+
+  # uncoverable branch true reason: _metadata_from_tags always returns an array reference for ban_masks
   $state->{ban_masks}  = [@{$metadata{ban_masks} || []}];
   $state->{tombstoned} = $metadata{tombstoned} ? 1 : 0;
   if ($state->{tombstoned}) {
@@ -500,6 +502,8 @@ sub _apply_group_metadata_event {
 
 sub _apply_operator_snapshot_event {
   my ($state, $event) = @_;
+
+  # uncoverable branch true reason: Net::Nostr::Event tags always default to an array reference
   for my $tag (@{$event->tags || []}) {
     my ($pubkey, $roles) = _member_tag_pubkey_and_roles($tag);
     if (!defined $pubkey) {
@@ -516,6 +520,8 @@ sub _apply_operator_snapshot_event {
 
 sub _apply_member_snapshot_event {
   my ($state, $event) = @_;
+
+  # uncoverable branch true reason: Net::Nostr::Event tags always default to an array reference
   for my $tag (@{$event->tags || []}) {
     my ($pubkey) = _member_tag_pubkey_and_roles($tag);
     if (!defined $pubkey) {
@@ -698,7 +704,9 @@ sub _apply_actor_metadata_event {
 sub _apply_actor_snapshot_event {
   my ($state, $event) = @_;
   my $member_info = Net::Nostr::Group->members_from_event($event);
-  my %snapshot    = map { $_ => 1 } @{$member_info->{members} || []};
+
+  # uncoverable branch true reason: Net::Nostr::Group always returns an array reference for members
+  my %snapshot = map { $_ => 1 } @{$member_info->{members} || []};
   $state->{member} = $snapshot{$state->{actor}} ? 1 : 0;
   return 1;
 }
