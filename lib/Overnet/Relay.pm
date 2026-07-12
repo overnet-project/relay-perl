@@ -422,7 +422,11 @@ sub _accept_overnet_event {
   }
 
   my $replaceable_message = $self->_replaceable_conflict_message($event);
+
+  # uncoverable branch true reason: no recognized Overnet kind is replaceable, so conflicts cannot arise on this path
   if (defined $replaceable_message) {
+
+    # uncoverable statement reason: unreachable until an Overnet kind is replaceable
     return _event_result($event, accepted => 1, stored => 0, message => $replaceable_message);
   }
 
@@ -481,7 +485,10 @@ sub _pre_store_rejection {
     return $message;
   }
 
+  # uncoverable branch true reason: the core validator already rejects kind 22242 as an unrecognized Overnet kind
   if ($event->kind == 22_242) {
+
+    # uncoverable statement reason: unreachable while kind 22242 fails core validation first
     return 'invalid: auth events must use AUTH';
   }
 
@@ -753,6 +760,7 @@ sub _handle_neg_open {
     return;
   }
 
+  # uncoverable branch false reason: a responder-side reconcile always produces a response frame
   if (defined $response) {
     $sessions->{$sub_id} = $ne;
     $conn->send(
@@ -765,6 +773,7 @@ sub _handle_neg_open {
     return;
   }
 
+  # uncoverable statement reason: unreachable while responder reconciliation always yields a response
   $conn->send(
     Net::Nostr::Message->new(
       type            => 'NEG-MSG',
@@ -772,6 +781,8 @@ sub _handle_neg_open {
       neg_msg         => '61',
     )->serialize
   );
+
+  # uncoverable statement reason: unreachable while responder reconciliation always yields a response
   return;
 }
 
@@ -785,7 +796,11 @@ sub _validate_overnet_publish {
   }
 
   my @mirror_errors = $self->_mirror_tag_errors($event);
+
+  # uncoverable branch true reason: the core validator reports every mirror tag divergence before this defensive check
   if (@mirror_errors) {
+
+    # uncoverable statement reason: unreachable while core validation catches all mirror divergences first
     return 'invalid: ' . $mirror_errors[0];
   }
 

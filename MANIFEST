@@ -31,6 +31,8 @@ README.md
 t/authoritative-nip29-relay.pl
 t/authority-hosted-channel-derivation.t
 t/bin-syntax.t
+t/client-interop-hooks-disabled.t
+t/client-interop-hooks.t
 t/deploy-canary-packaging.t
 t/deploy-packaging.t
 t/deploy-restore-drill-live.t
@@ -55,10 +57,13 @@ t/program-irc-server.t
 t/program-runtime-nostr.t
 t/readme-policy.t
 t/relay-cli-profile-contracts.t
+t/relay-deploy.t
+t/relay-http-live.t
 t/relay-live.t
 t/relay-ops-live.t
 t/relay-profile-contracts.t
 t/relay-sync-cli-live.t
+t/relay-sync-config.t
 t/relay-sync-live.t
 t/relay.t
 t/repo-split.t

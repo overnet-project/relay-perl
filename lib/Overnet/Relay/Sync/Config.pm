@@ -24,7 +24,7 @@ sub load_file {
     or croak "unable to open config file $path: $OS_ERROR";
   local $INPUT_RECORD_SEPARATOR = undef;
   my $raw = <$fh>;
-  close $fh
+  close $fh    # uncoverable branch true reason: close cannot fail on a readable handle here
     or croak "unable to close config file $path: $OS_ERROR";
 
   my $data;

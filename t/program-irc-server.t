@@ -2140,7 +2140,9 @@ subtest 'IRC server program accepts clients, emits Overnet output, and fans chan
     $key,
     'mapped channel PART event',
     {
-      min => int(time()) - 10,
+      # This window is checked long after the PART was sent, so its slack
+      # scales with the instrumentation slowdown like the wait helpers do.
+      min => int(time()) - (10 * $TIMEOUT_SCALE),
       max => int(time()) + 5,
     },
     $part_expected_content,
@@ -7680,8 +7682,20 @@ qr/\A:\Q$args{server_name}\E\ NOTICE\ \Q$args{nick}\E\ :OVERNETAUTH\ DELEGATE\ (
 
     _write_client_line($alice_a, "MODE $channel +b");
     ok $host_a->pump(timeout_ms => $relay_host_pump_ms) >= 0, 'instance A pumps the post-unban ban-list query';
-    is _read_client_line($alice_a, 3_000), ":$server_name_a 368 alice $channel :End of channel ban list",
-      'instance A reports an empty authoritative ban list after -b';
+
+    # The ban-list reply needs further host pumping when the query's
+    # authoritative derivation outlives the single pump above, so keep
+    # pumping instance A while waiting instead of blocking on the socket.
+    is(
+      scalar _pump_hosts_until_client_lines(
+        hosts      => [$host_a],
+        client     => $alice_a,
+        count      => 1,
+        timeout_ms => _scaled_ms(3_000),
+      ),
+      [":$server_name_a 368 alice $channel :End of channel ban list"],
+      'instance A reports an empty authoritative ban list after -b',
+    );
 
     my $relay_unban_events = _query_nostr_events_from_relay(
       relay_url => $relay_url,
