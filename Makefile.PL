@@ -44,6 +44,7 @@ WriteMakefile(
         t/manifest-skip-policy.t
         t/relay-cli-profile-contracts.t
         t/relay-deploy.t
+        t/relay-info.t
         t/relay-profile-contracts.t
         t/relay-sync-config.t
         t/relay.t
