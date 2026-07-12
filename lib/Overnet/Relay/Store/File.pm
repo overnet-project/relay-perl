@@ -86,7 +86,7 @@ sub _load_from_disk {
   open my $fh, '<:raw', $path
     or croak "Can't open relay store file $path for reading: $OS_ERROR";
   my $raw = do { local $INPUT_RECORD_SEPARATOR = undef; <$fh> };
-  close $fh
+  close $fh    # uncoverable branch true reason: close cannot fail on a readable handle here
     or croak "Can't close relay store file $path after reading: $OS_ERROR";
 
   if (!(defined $raw && length $raw)) {
@@ -200,6 +200,7 @@ sub _compact_to_disk {
   my $path = $self->{path};
   $self->_ensure_directory($path);
 
+  # uncoverable branch true reason: all_events always returns an array reference
   my @records = map { $JSON->encode([q{+}, $_->to_hash]) } @{$self->all_events || []};
   my $payload = @records ? join("\n", @records) . "\n" : q{};
 

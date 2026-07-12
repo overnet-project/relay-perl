@@ -49,9 +49,13 @@ sub BUILDARGS {
 
   my (%by_event_type, %profiles, %event_types);
   for my $contract (@contracts) {
+
+    # uncoverable branch false reason: contract set validation requires every contract to carry a profile
     if (defined $contract->{profile}) {
       $profiles{$contract->{profile}} = 1;
     }
+
+    # uncoverable branch true reason: contract set validation requires event_types to be a non-empty hash
     for my $event_type_name (sort keys %{$contract->{event_types} || {}}) {
       push @{$by_event_type{$event_type_name}}, $contract;
       $event_types{$event_type_name} = 1;
@@ -104,8 +108,10 @@ sub validate_event {
   if ($self->{policy} eq 'off') {
     return;
   }
+
+  # uncoverable branch true reason: BUILDARGS forces the policy to off when no contracts are configured
   if (!@{$self->{contracts}}) {
-    return;
+    return;    # uncoverable statement reason: unreachable while an empty contract set implies the off policy
   }
 
   my $event_type_name = _event_type_name($event);
@@ -140,6 +146,8 @@ sub validate_event {
 
 sub _event_type_name {
   my ($event) = @_;
+
+  # uncoverable branch true reason: Net::Nostr::Event tags always default to an array reference
   for my $tag (@{$event->tags || []}) {
     if (!(ref($tag) eq 'ARRAY' && @{$tag})) {
       next;

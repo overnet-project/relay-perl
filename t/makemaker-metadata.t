@@ -80,6 +80,7 @@ is(
         t/relay-deploy.t
         t/relay-info.t
         t/relay-profile-contracts.t
+        t/relay-store-file.t
         t/relay-sync-config.t
         t/relay.t
         t/repo-split.t

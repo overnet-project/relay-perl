@@ -6,6 +6,7 @@ use Test2::V0;
 use Net::Nostr::Key;
 use Net::Nostr::Message;
 use Overnet::Relay;
+use Overnet::Relay::ProfileContracts;
 
 my $JSON   = JSON->new->utf8->canonical;
 my $author = Net::Nostr::Key->new;
@@ -170,7 +171,128 @@ subtest 'contracts are validated at relay construction time' => sub {
   like $error, qr/profile_contract\./mx, 'invalid contract is rejected before publish';
 };
 
+subtest 'the contract index validates its constructor arguments' => sub {
+  ok(Overnet::Relay::ProfileContracts->new({contracts => [_chat_contract()]}),
+    'hashref arguments are accepted');
+  like dies { Overnet::Relay::ProfileContracts->new('odd') },
+    qr/constructor\ arguments\ must\ be\ a\ hash\ or\ hash\ reference/mx,
+    'odd argument lists are rejected';
+  like dies { Overnet::Relay::ProfileContracts->new(contracts => {}) },
+    qr/profile_contracts\ must\ be\ an\ array\ reference/mx,
+    'non-array contracts are rejected';
+  like dies { Overnet::Relay::ProfileContracts->new(policy => 'bogus') },
+    qr/profile_contract_policy\ must\ be\ off,\ known,\ or\ required/mx,
+    'unknown policies are rejected';
+  like dies { Overnet::Relay::ProfileContracts->new(policy => ['off']) },
+    qr/profile_contract_policy\ must\ be\ off,\ known,\ or\ required/mx,
+    'ref policies are rejected';
+};
+
+subtest 'the contract index handles events without a usable event type tag' => sub {
+  my $index = Overnet::Relay::ProfileContracts->new(
+    contracts => [_chat_contract()],
+    policy    => 'required',
+  );
+
+  my $untagged = $author->create_event(
+    kind    => 7800,
+    tags    => [[], ['overnet_et'], ['x', 'y']],
+    content => '{}',
+  );
+  is $index->validate_event($untagged), 'profile_event.event_type_undefined',
+    'empty and truncated tags never provide an event type under required policy';
+
+  my $known_index = Overnet::Relay::ProfileContracts->new(
+    contracts => [_chat_contract()],
+    policy    => 'known',
+  );
+  is $known_index->validate_event($untagged), undef,
+    'known policy leaves untyped events to core validation';
+};
+
+subtest 'nested profile namespaces may share an event type' => sub {
+  my $index = Overnet::Relay::ProfileContracts->new(
+    contracts => [
+      _namespaced_contract('chat',       'chat.extra.thing', 'chat.extra.channel'),
+      _namespaced_contract('chat.extra', 'chat.extra.thing', 'chat.extra.channel'),
+    ],
+    policy => 'required',
+  );
+
+  is $index->contracts->[0]{profile}, 'chat', 'the contract list round-trips';
+  is $index->metadata->{event_types}, ['chat.extra.thing'],
+    'the shared event type is advertised once';
+
+  my $event = $author->create_event(
+    kind => 7800,
+    tags => _overnet_tags(
+      event_type  => 'chat.extra.thing',
+      object_type => 'chat.extra.channel',
+      object_id   => 'x:1',
+    ),
+    content => $JSON->encode({provenance => {type => 'native'}, body => {text => 'hi'}}),
+  );
+  is $index->validate_event($event), 'profile_event.event_type_ambiguous',
+    'events matching multiple contracts are validated against the full set';
+};
+
 done_testing;
+
+sub _namespaced_contract {
+  my ($profile, $event_type, $object_type) = @_;
+  return {
+    contract_version => 1,
+    profile          => $profile,
+    profile_version  => '1.0.0',
+    status           => 'stable',
+    description      => "Contract for the $profile profile",
+    capabilities     => ["$profile.messaging"],
+    object_types     => {
+      $object_type => {
+        description => 'Namespaced channel',
+        id          => {
+          scheme   => 'uri',
+          pattern  => undef,
+          examples => ['x:1'],
+        },
+        state => {
+          derivation       => 'event-log',
+          state_event_type => undef,
+        },
+        extensions => {},
+      },
+    },
+    event_types => {
+      $event_type => {
+        description   => 'Namespaced event',
+        kind          => 7800,
+        object_type   => $object_type,
+        required_tags => [qw(overnet_v overnet_et overnet_ot overnet_oid v t o d)],
+        body_schema   => {
+          type       => 'object',
+          required   => ['text'],
+          properties => {
+            text => {type => 'string'},
+          },
+          additionalProperties => JSON::false,
+        },
+        references    => [],
+        state_effect  => 'updates',
+        authorization => {
+          model       => 'open',
+          description => 'Any author may write namespaced events',
+        },
+        privacy    => 'public',
+        extensions => {},
+      },
+    },
+    fixtures => {
+      valid   => [],
+      invalid => [],
+    },
+    extensions => {},
+  };
+}
 
 sub _build_relay {
   my (%args) = @_;
