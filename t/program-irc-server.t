@@ -4300,7 +4300,7 @@ if (_run_program_irc_server_group('relay')) {
     my $group_host                   = 'groups.example.test';
     my $group_id                     = 'ops';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 10_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(10_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name                  = 'overnet.irc.local';
@@ -4635,8 +4635,8 @@ if (_run_program_irc_server_group('relay')) {
     my $group_host                   = 'groups.example.test';
     my $group_id                     = 'ops';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 5_000;
-    my $fresh_reinvite_timeout_ms    = 10_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(5_000);
+    my $fresh_reinvite_timeout_ms    = _scaled_ms(10_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-a.irc.local';
@@ -5752,7 +5752,7 @@ if (_run_program_irc_server_group('relay')) {
     my $channel                      = '#Fresh';
     my $group_host                   = 'groups.example.test';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 5_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(5_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-create-a.irc.local';
@@ -6283,7 +6283,7 @@ if (_run_program_irc_server_group('relay')) {
     my $channel                      = '#Gone';
     my $group_host                   = 'groups.example.test';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 5_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(5_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-delete-a.irc.local';
@@ -6713,7 +6713,7 @@ if (_run_program_irc_server_group('relay')) {
     my $channel                      = '#Return';
     my $group_host                   = 'groups.example.test';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 5_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(5_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-undelete-a.irc.local';
@@ -7231,7 +7231,7 @@ if (_run_program_irc_server_group('relay')) {
     my $group_host                   = 'groups.example.test';
     my $group_id                     = 'ops';
     my $relay_host_pump_ms           = 1_500;
-    my $relay_propagation_timeout_ms = 5_000;
+    my $relay_propagation_timeout_ms = _scaled_ms(5_000);
     my $relay_port                   = _free_port();
     my $relay_url                    = "ws://127.0.0.1:$relay_port";
     my $server_name_a                = 'overnet-ban-a.irc.local';
