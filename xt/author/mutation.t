@@ -54,6 +54,14 @@ my $test_command  = $ENV{OVERNET_MUTATION_TEST_COMMAND}  // 'prove -Ilib t';
 my $timeout       = $ENV{OVERNET_MUTATION_TIMEOUT}       // 120;
 my $max_survivors = $ENV{OVERNET_MUTATION_MAX_SURVIVORS} // 0;
 
+# Never run the mutant suites under coverage instrumentation. It is meaningless
+# for mutation testing, and when this template is itself exercised under
+# Devel::Cover (e.g. the coverage gate running the contract test that drives
+# this template) the child suites would otherwise inherit the instrumentation
+# and leak their modules into the parent coverage database.
+local $ENV{HARNESS_PERL_SWITCHES} = q{};
+local $ENV{PERL5OPT}              = q{};
+
 # Devel::Mutator swaps each mutant file over the real one in place while the
 # suite runs and moves it back afterwards; if this process were interrupted
 # mid-swap the source tree would be left corrupted. So the whole run happens in
