@@ -90,3 +90,63 @@ jobs:
         run: |
           prove -r -l -v t/
           prove -r -l -v xt/author/
+
+  devel-cover:
+    runs-on: ubuntu-latest
+    name: Devel::Cover gate
+    timeout-minutes: 90
+    env:
+      PERL5LIB: /home/runner/perl5/lib/perl5:${{ github.workspace }}/core-perl/lib:${{ github.workspace }}/irc-server/lib
+      PERL_LOCAL_LIB_ROOT: /home/runner/perl5
+      PERL_MB_OPT: --install_base /home/runner/perl5
+      PERL_MM_OPT: INSTALL_BASE=/home/runner/perl5
+    defaults:
+      run:
+        working-directory: relay-perl
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: relay-perl
+
+      - uses: actions/checkout@v4
+        with:
+          repository: overnet-project/core-perl
+          path: core-perl
+
+      - uses: actions/checkout@v4
+        with:
+          repository: overnet-project/irc-server
+          path: irc-server
+
+      - uses: actions/checkout@v4
+        with:
+          repository: overnet-project/adapter-irc-perl
+          path: adapter-irc-perl
+
+      - uses: actions/checkout@v4
+        with:
+          repository: overnet-project/spec
+          path: spec
+
+      - uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: '5.40'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/perl5
+          key: perl-devel-cover-5.40-${{ hashFiles('relay-perl/Makefile.PL', 'relay-perl/.github/workflows/test.yml') }}
+
+      - name: Install dependencies
+        run: |
+          cpanm --local-lib ~/perl5 --installdeps ./core-perl
+          cpanm --local-lib ~/perl5 --installdeps ./relay-perl
+          cpanm --local-lib ~/perl5 --reinstall https://github.com/overnet-project/overnet-perl-style/archive/refs/heads/main.tar.gz
+          cpanm --local-lib ~/perl5 --notest Devel::Cover
+          echo "$HOME/perl5/bin" >> "$GITHUB_PATH"
+
+      - name: Enforce per-file coverage floors
+        env:
+          OVERNET_COVERAGE: '1'
+        run: prove -l -v xt/author/devel-cover.t
