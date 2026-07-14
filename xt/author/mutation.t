@@ -64,31 +64,60 @@ my $parent = abs_path(File::Spec->catdir($ROOT, File::Spec->updir));
 my $work   = tempdir('overnet-mutation-XXXXXXXX', DIR => $parent, CLEANUP => 1);
 
 # tar out of the repo (excluding VCS and generated dirs) straight into the copy.
-my $copy_status =
-  system "tar -C '$ROOT' --exclude=.git --exclude=mutants --exclude=cover_db --exclude=blib -cf - . | tar -C '$work' -xf -";
+# Run under bash with pipefail (the default /bin/sh is dash, which lacks it) and
+# pass the paths as positional args, so a failure in the producing tar is not
+# masked by the extracting tar's success and no path is interpolated into the
+# shell.
+my $copy_status = system 'bash', '-c',
+  'set -o pipefail; '
+  . 'tar -C "$1" --exclude=.git --exclude=mutants --exclude=cover_db --exclude=blib -cf - . '
+  . '| tar -C "$2" -xf -',
+  'bash', $ROOT, $work;
 is $copy_status, 0, 'copied the repo into an isolated work tree' or bail_out('could not stage a work tree');
 
+# Everything below runs in the copy. Restore the original cwd unconditionally --
+# even if Devel::Mutator dies -- so tempdir cleanup does not run from a directory
+# that no longer exists.
 my $cwd = getcwd();
 chdir $work or bail_out("chdir $work: $!");
 
-my $mutate_out = Capture::Tiny::capture_merged(sub {
-  Devel::Mutator::Command::Mutate->new(root => q{.})->run(@targets);
-});
-my ($mutant_count) = $mutate_out =~ /mutants:\s*(\d+)/xms;
-$mutant_count //= 0;
+# Mutation results are only meaningful against a green suite. If the copied
+# suite is already failing -- a wrong OVERNET_MUTATION_TEST_COMMAND, a partial
+# copy, or an unrelated failure -- Devel::Mutator would count every mutant as
+# "killed" for the wrong reason and report a misleading pass. So establish the
+# baseline first, running the command exactly as the mutant runs will.
+my ($baseline_out, $baseline_status) = Capture::Tiny::capture_merged(sub { system $test_command });
 
-my $test_out = q{};
-if ($mutant_count > 0) {
-  $test_out = Capture::Tiny::capture_merged(sub {
-    Devel::Mutator::Command::Test->new(root => q{.}, command => $test_command, timeout => $timeout)->run;
-  });
+my ($mutate_out, $test_out) = (q{}, q{});
+my $run_ok    = 1;
+my $run_error = q{};
+if ($baseline_status == 0) {
+  $run_ok = eval {
+    $mutate_out = Capture::Tiny::capture_merged(sub {
+      Devel::Mutator::Command::Mutate->new(root => q{.})->run(@targets);
+    });
+    if (($mutate_out =~ /mutants:\s*(\d+)/xms ? $1 : 0) > 0) {
+      $test_out = Capture::Tiny::capture_merged(sub {
+        Devel::Mutator::Command::Test->new(root => q{.}, command => $test_command, timeout => $timeout)->run;
+      });
+    }
+    1;
+  };
+  $run_error = $@ if !$run_ok;
 }
 
 chdir $cwd or bail_out("chdir $cwd: $!");
 
+my ($mutant_count) = $mutate_out =~ /mutants:\s*(\d+)/xms;
+$mutant_count //= 0;
 my ($survivors) = $test_out =~ /Result:\s*FAIL\s*\((\d+)\//xms;
 $survivors //= 0;
 my $timeouts = () = $test_out =~ /[.][.][.]\s+n\/a\s+\(timeout/xmsg;
+
+ok $baseline_status == 0, 'the unmutated suite passes (a valid mutation baseline)'
+  or diag "Baseline suite is not green; mutation results would be meaningless:\n$baseline_out";
+
+ok $run_ok, 'the mutation run completed without error' or diag $run_error;
 
 ok $mutant_count > 0, "generated mutants for the target modules ($mutant_count mutants)"
   or diag $mutate_out;
@@ -98,7 +127,7 @@ ok $survivors <= $max_survivors,
   or diag "Mutations your tests did not catch:\n$test_out";
 
 ok $timeouts == 0, "no inconclusive (timed-out) mutants ($timeouts)"
-  or diag "Raise OVERNET_MUTATION_TIMEOUT or narrow OVERNET_MUTATION_TEST_COMMAND; a "
+  or diag 'Raise OVERNET_MUTATION_TIMEOUT or narrow OVERNET_MUTATION_TEST_COMMAND; a '
   . 'timed-out mutant is neither killed nor counted as a survivor.';
 
 done_testing;
