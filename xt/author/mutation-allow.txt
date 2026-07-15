@@ -8,3 +8,16 @@
 # possible inputs; no test can distinguish them.
 -  return $result->{valid} ? undef : ($result->{reason} || $result->{errors}[0]);
 +  return $result->{valid} ? undef : ($result->{reason} // $result->{errors}[0]);
+
+# Equivalent mutant: post-increment vs post-decrement in the duplicate-name guard.
+# %seen_name is a fresh hash and its counter for a given name is read nowhere
+# else in the module (only line 132 uses it, as a boolean). Post-increment
+# returns the old value then stores old+1, so repeated occurrences of a name
+# yield 0, 1, 2, ...; post-decrement returns the old value then stores old-1,
+# yielding 0, -1, -2, .... Zero is the only falsy integer and occurs exactly on
+# the first occurrence in both variants, while every later occurrence is a
+# nonzero (hence truthy) value in both. The guard therefore croaks on the same
+# (second and later) occurrences regardless of operator; no input distinguishes
+# them.
+-  if (defined $name && $seen_name->{$name}--) {
++  if (defined $name && $seen_name->{$name}++) {
