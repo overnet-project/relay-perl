@@ -1,0 +1,10 @@
+# Equivalent mutant: // vs || in validate_event's rejection reason.
+# This expression is only evaluated when $result->{valid} is false. Every such
+# result originates from Overnet::Core::ProfileContract::_result, which sets
+# reason => $errors->[0] whenever errors are present, so $result->{reason} is
+# always identical to $result->{errors}[0]. Every error constant is a non-empty
+# string, hence reason is always defined AND truthy in this branch. The two
+# operators (defined-or vs logical-or) therefore produce the same value for all
+# possible inputs; no test can distinguish them.
+-  return $result->{valid} ? undef : ($result->{reason} || $result->{errors}[0]);
++  return $result->{valid} ? undef : ($result->{reason} // $result->{errors}[0]);
