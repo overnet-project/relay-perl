@@ -22,11 +22,25 @@ use Test2::V0;
 #   OVERNET_MUTATION_TEST_COMMAND='prove -Ilib t/authority-delegation.t' \
 #   perl -Ilib xt/author/mutation.t
 #
+# Devel::Mutator's operator set is narrow (~14 swaps), so treat a clean run as
+# "these tests survived a narrow mutation set", not proof of a strong suite.
+#
+# Equivalent mutants (a change with no observable effect) survive but are not
+# real gaps. Rather than a blunt tolerated-count, reviewed survivors are pinned
+# individually in an allowlist file (default xt/author/mutation-allow.txt): each
+# entry is the changed (-/+) diff lines of a survivor a human has judged
+# equivalent or intentional. A survivor that matches an allowlist entry is
+# accepted; any *unreviewed* survivor still fails the gate, so a new real gap is
+# never hidden by an accepted equivalent. On failure the gate prints each
+# unreviewed survivor in exactly the format the allowlist expects, ready to
+# paste in after review.
+#
 # Knobs (all optional except the two above):
 #   OVERNET_MUTATION_FILES          colon/space separated lib/ modules to mutate
 #   OVERNET_MUTATION_TEST_COMMAND   suite to run per mutant (default: prove -Ilib t)
 #   OVERNET_MUTATION_TIMEOUT        per-mutant seconds before "inconclusive" (default 120)
-#   OVERNET_MUTATION_MAX_SURVIVORS  tolerated survivors before failing (default 0)
+#   OVERNET_MUTATION_MAX_SURVIVORS  tolerated UNREVIEWED survivors (default 0)
+#   OVERNET_MUTATION_ALLOW          allowlist path (default xt/author/mutation-allow.txt)
 
 if (!$ENV{OVERNET_MUTATION}) {
   plan skip_all => 'set OVERNET_MUTATION=1 to run the mutation gate';
@@ -118,9 +132,17 @@ chdir $cwd or bail_out("chdir $cwd: $!");
 
 my ($mutant_count) = $mutate_out =~ /mutants:\s*(\d+)/xms;
 $mutant_count //= 0;
-my ($survivors) = $test_out =~ /Result:\s*FAIL\s*\((\d+)\//xms;
-$survivors //= 0;
+my ($reported_survivors) = $test_out =~ /Result:\s*FAIL\s*\((\d+)\//xms;
+$reported_survivors //= 0;
 my $timeouts = () = $test_out =~ /[.][.][.]\s+n\/a\s+\(timeout/xmsg;
+
+# Classify survivors against the reviewed-equivalent allowlist.
+my $allow_file = $ENV{OVERNET_MUTATION_ALLOW}
+  // File::Spec->catfile($ROOT, 'xt', 'author', 'mutation-allow.txt');
+my @survivors  = _parse_survivors($test_out);
+my %allowed    = _read_allowlist($allow_file);
+my @unreviewed = grep { !$allowed{$_} } @survivors;
+my $accepted   = @survivors - @unreviewed;
 
 ok $baseline_status == 0, 'the unmutated suite passes (a valid mutation baseline)'
   or diag "Baseline suite is not green; mutation results would be meaningless:\n$baseline_out";
@@ -130,12 +152,79 @@ ok $run_ok, 'the mutation run completed without error' or diag $run_error;
 ok $mutant_count > 0, "generated mutants for the target modules ($mutant_count mutants)"
   or diag $mutate_out;
 
-ok $survivors <= $max_survivors,
-  "surviving mutants ($survivors) within the allowed maximum ($max_survivors)"
-  or diag "Mutations your tests did not catch:\n$test_out";
+# Cross-check our own diff parsing against Devel::Mutator's survivor count, so a
+# format drift cannot silently drop survivors from the allowlist comparison.
+ok scalar(@survivors) == $reported_survivors,
+  "parsed all reported survivors (@{[ scalar @survivors ]} of $reported_survivors)"
+  or diag "Could not parse the survivor diffs; raw output:\n$test_out";
+
+ok scalar(@unreviewed) <= $max_survivors,
+  sprintf('unreviewed surviving mutants (%d) within the allowed maximum (%d)%s',
+  scalar(@unreviewed), $max_survivors, $accepted ? " [$accepted allowlisted]" : q{})
+  or diag _survivor_report(\@unreviewed, $allow_file);
 
 ok $timeouts == 0, "no inconclusive (timed-out) mutants ($timeouts)"
   or diag 'Raise OVERNET_MUTATION_TIMEOUT or narrow OVERNET_MUTATION_TEST_COMMAND; a '
   . 'timed-out mutant is neither killed nor counted as a survivor.';
 
 done_testing;
+
+# A survivor's signature is its changed diff lines (the -/+ lines, minus the
+# ---/+++ headers), trailing whitespace stripped. Stable across runs while the
+# module's source is unchanged, and human-readable for review.
+sub _parse_survivors {
+  my ($out) = @_;
+  my @lines = split /\n/xms, $out;
+  my @signatures;
+  my $i = 0;
+  while ($i < @lines) {
+    if ($lines[$i] !~ m{\A\(\d+/\d+\) .* [.][.][.] \s+ not \s ok \s* \z}xms) {
+      $i++;
+      next;
+    }
+    $i++;
+    my @change;
+    while ($i < @lines
+      && $lines[$i] !~ m{\A\(\d+/\d+\)}xms
+      && $lines[$i] !~ m{\AResult:}xms) {
+      push @change, _trim_right($lines[$i])
+        if $lines[$i] =~ /\A[-+]/xms && $lines[$i] !~ /\A(?:---|[+][+][+])/xms;
+      $i++;
+    }
+    push @signatures, join("\n", @change) if @change;
+  }
+  return @signatures;
+}
+
+sub _read_allowlist {
+  my ($file) = @_;
+  my %allowed;
+  return %allowed if !-f $file;
+  open my $fh, '<', $file or return %allowed;
+  my @block;
+  while (my $line = <$fh>) {
+    chomp $line;
+    if ($line =~ /\A\s*[#]/xms || $line =~ /\A\s*\z/xms) {
+      $allowed{ join("\n", @block) } = 1 if @block;
+      @block = ();
+      next;
+    }
+    push @block, _trim_right($line) if $line =~ /\A[-+]/xms;
+  }
+  close $fh or return %allowed;
+  $allowed{ join("\n", @block) } = 1 if @block;
+  return %allowed;
+}
+
+sub _survivor_report {
+  my ($unreviewed, $file) = @_;
+  return sprintf "%d mutant(s) survived unreviewed. If a survivor is genuinely "
+    . "equivalent or\nintentional, add its block (below) to %s after review:\n\n%s\n",
+    scalar(@{$unreviewed}), $file, join("\n\n", @{$unreviewed});
+}
+
+sub _trim_right {
+  my ($line) = @_;
+  $line =~ s/\s+\z//xms;
+  return $line;
+}
