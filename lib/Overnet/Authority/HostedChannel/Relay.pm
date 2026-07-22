@@ -805,15 +805,15 @@ sub _event_belongs_to_group {
     }
   }
 
-  my %tags = _first_tag_values($event->tags);
-  if (defined $tags{d} && $tags{d} eq $group_id) {
-    return 1;
-  }
-  if (defined $tags{h} && $tags{h} eq $group_id) {
-    return 1;
-  }
-
-  return 0;
+  # Bind the event to a group by the SAME tag its authorization used: snapshot
+  # events (39xxx) are authorized and addressed by their `d` tag, control events
+  # (9xxx) by their `h` tag. Matching the other tag too would let an event
+  # authorized against one group (say an empty group an attacker bootstraps for
+  # free) be folded into a different, established group's derived state, escaping
+  # that group's authorization entirely.
+  my %tags        = _first_tag_values($event->tags);
+  my $binding_tag = $GROUP_SNAPSHOT_KIND{$event->kind} ? 'd' : 'h';
+  return defined $tags{$binding_tag} && $tags{$binding_tag} eq $group_id ? 1 : 0;
 }
 
 sub _event_has_delegation_shape {

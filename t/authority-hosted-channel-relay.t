@@ -1650,4 +1650,140 @@ subtest 'metadata and helper tag parsing tolerate malformed input' => sub {
   ok $accepted, 'a join into an open stateless group is accepted';
 };
 
+# An event must be derived into the same group it was authorized against.
+# Authorization binds a control event to its `h` tag and a delegated snapshot to
+# its `d` tag; derivation must bind to the same tag, never to the other one. If
+# it did not, an attacker could authorize an event against a throwaway empty
+# group they bootstrap for free (via one tag) while a second tag smuggled the
+# event into an established victim group's derived state.
+subtest 'a control event cannot smuggle itself into another group via a d tag' => sub {
+  my $relay     = _relay();
+  my $victim    = 'victim-channel';
+  my $throwaway = 'attacker-scratch-group';
+
+  # A legitimately established victim channel with a real operator.
+  my $owner_grant = _grant_event(actor_key => $operator_key, delegate_pubkey => $operator_session_key->pubkey_hex);
+  $relay->store->store($owner_grant);
+  my $bootstrap = $operator_session_key->create_event(
+    kind       => 9_000,
+    created_at => $BASE_TIME + 1,
+    content    => q{},
+    tags       => [
+      ['h',                 $victim],
+      ['overnet_actor',     $operator_key->pubkey_hex],
+      ['overnet_authority', $owner_grant->id],
+      ['overnet_sequence',  '1'],
+      ['p',                 $operator_key->pubkey_hex, 'irc.operator'],
+    ],
+  );
+  my ($seeded) = _authorize($relay, $bootstrap);
+  ok $seeded, 'the victim channel is established with a real operator';
+  $relay->store->store($bootstrap);
+
+  # The attacker is a self-delegating nobody with no rights in the victim.
+  my $attacker_grant = _grant_event(actor_key => $attacker_key, delegate_pubkey => $attacker_session_key->pubkey_hex);
+  $relay->store->store($attacker_grant);
+
+  # The injection: a 9000 authorized against the empty throwaway group (its `h`
+  # tag) but carrying `d` = the victim to smuggle itself into the victim's
+  # derived state and name the attacker an operator there.
+  my $injection = $attacker_session_key->create_event(
+    kind       => 9_000,
+    created_at => $BASE_TIME + 2,
+    content    => q{},
+    tags       => [
+      ['h',                 $throwaway],
+      ['d',                 $victim],
+      ['overnet_actor',     $attacker_key->pubkey_hex],
+      ['overnet_authority', $attacker_grant->id],
+      ['overnet_sequence',  '1'],
+      ['p',                 $attacker_key->pubkey_hex, 'irc.operator'],
+    ],
+  );
+  my ($injected) = _authorize($relay, $injection);
+  $relay->store->store($injection) if $injected;    # a real relay stores what it accepts
+
+  # Payoff: the attacker tries a real operator action (removing the operator)
+  # inside the victim. The smuggled `d` must not have made them an operator there.
+  my $kick = $attacker_session_key->create_event(
+    kind       => 9_001,
+    created_at => $BASE_TIME + 3,
+    content    => q{},
+    tags       => [
+      ['h',                 $victim],
+      ['overnet_actor',     $attacker_key->pubkey_hex],
+      ['overnet_authority', $attacker_grant->id],
+      ['overnet_sequence',  '2'],
+      ['p',                 $operator_key->pubkey_hex],
+    ],
+  );
+  my ($kicked, $reason) = _authorize($relay, $kick);
+  ok !$kicked, 'the attacker cannot moderate a victim channel it never had rights in';
+  like $reason, qr/unauthorized:\ actor\ is\ not\ a\ channel\ operator/mx,
+    'the smuggled d tag did not confer operator role in the victim';
+};
+
+subtest 'a delegated 39000 cannot smuggle metadata into another group via an h tag' => sub {
+  my $relay     = _relay();
+  my $victim    = 'victim-channel-2';
+  my $throwaway = 'attacker-scratch-group-2';
+
+  my $owner_grant = _grant_event(actor_key => $operator_key, delegate_pubkey => $operator_session_key->pubkey_hex);
+  $relay->store->store($owner_grant);
+  my $bootstrap = $operator_session_key->create_event(
+    kind       => 9_000,
+    created_at => $BASE_TIME + 1,
+    content    => q{},
+    tags       => [
+      ['h',                 $victim],
+      ['overnet_actor',     $operator_key->pubkey_hex],
+      ['overnet_authority', $owner_grant->id],
+      ['overnet_sequence',  '1'],
+      ['p',                 $operator_key->pubkey_hex, 'irc.operator'],
+    ],
+  );
+  my ($seeded) = _authorize($relay, $bootstrap);
+  ok $seeded, 'the victim channel is established';
+  $relay->store->store($bootstrap);
+
+  my $attacker_grant = _grant_event(actor_key => $attacker_key, delegate_pubkey => $attacker_session_key->pubkey_hex);
+  $relay->store->store($attacker_grant);
+
+  # A delegated 39000 authorized against the empty throwaway group (its `d` tag)
+  # but carrying `h` = the victim plus a tombstone, to smuggle the tombstone into
+  # the victim's derived state.
+  my $injection = $attacker_session_key->create_event(
+    kind       => 39_000,
+    created_at => $BASE_TIME + 2,
+    content    => q{},
+    tags       => [
+      ['d',                 $throwaway],
+      ['h',                 $victim],
+      ['overnet_actor',     $attacker_key->pubkey_hex],
+      ['overnet_authority', $attacker_grant->id],
+      ['overnet_sequence',  '1'],
+      ['status',            'tombstoned'],
+    ],
+  );
+  my ($injected) = _authorize($relay, $injection);
+  $relay->store->store($injection) if $injected;
+
+  # The victim's operator must still be able to act: the victim was not
+  # tombstoned by a foreign 39000 bound to a different group.
+  my $operator_action = $operator_session_key->create_event(
+    kind       => 9_000,
+    created_at => $BASE_TIME + 3,
+    content    => q{},
+    tags       => [
+      ['h',                 $victim],
+      ['overnet_actor',     $operator_key->pubkey_hex],
+      ['overnet_authority', $owner_grant->id],
+      ['overnet_sequence',  '2'],
+      ['p',                 $attacker_key->pubkey_hex],
+    ],
+  );
+  my ($acted, $reason) = _authorize($relay, $operator_action);
+  ok $acted, 'the victim channel was not tombstoned by a foreign 39000' or diag $reason;
+};
+
 done_testing;
