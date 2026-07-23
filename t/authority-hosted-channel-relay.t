@@ -1847,4 +1847,54 @@ subtest 'a channel operator can still tombstone an established channel' => sub {
   ok $accepted, 'the operator can tombstone their own established channel' or diag $reason;
 };
 
+# The creation bootstrap establishes a channel's identity, not its moderation
+# state. An attacker must not be able to pre-poison an unclaimed channel with
+# closed/ban metadata that whoever legitimately claims it silently inherits.
+subtest 'a delegated 39000 cannot close or ban an unclaimed group' => sub {
+  for my $case (
+    {label => 'close', tags => [['closed']]},
+    {label => 'ban',   tags => [['ban', '*!*@evil.example']]},
+    )
+  {
+    my $relay = _relay();
+    my $grant = _grant_event(actor_key => $attacker_key, delegate_pubkey => $attacker_session_key->pubkey_hex);
+    $relay->store->store($grant);
+
+    my $event = _snapshot_event(
+      signer_key => $attacker_session_key,
+      kind       => 39_000,
+      extra_tags => [
+        ['overnet_actor',     $attacker_key->pubkey_hex],
+        ['overnet_authority', $grant->id],
+        @{$case->{tags}},
+      ],
+    );
+    my ($accepted, $reason) = _authorize($relay, $event);
+    ok !$accepted, "a delegated 39000 cannot $case->{label} an unclaimed group";
+    like $reason, qr/unauthorized:\ an\ unclaimed\ group\ cannot\ be\ closed\ or\ banned/mx,
+      "the $case->{label} refusal names the reason";
+  }
+};
+
+# The benign creation bootstrap (naming the channel) must still work.
+subtest 'a name-only delegated 39000 creation bootstrap is still accepted' => sub {
+  my $relay = _relay();
+  my $grant = _grant_event(actor_key => $operator_key, delegate_pubkey => $operator_session_key->pubkey_hex);
+  $relay->store->store($grant);
+
+  my ($accepted, $reason) = _authorize(
+    $relay,
+    _snapshot_event(
+      signer_key => $operator_session_key,
+      kind       => 39_000,
+      extra_tags => [
+        ['overnet_actor',     $operator_key->pubkey_hex],
+        ['overnet_authority', $grant->id],
+        ['name',              '#newchannel'],
+      ],
+    ),
+  );
+  ok $accepted, 'a name-only creation bootstrap on an unclaimed group is accepted' or diag $reason;
+};
+
 done_testing;
