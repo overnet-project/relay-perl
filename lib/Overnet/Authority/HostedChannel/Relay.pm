@@ -173,6 +173,17 @@ sub _authorize_snapshot_event {
     return _reject('unauthorized: group is tombstoned');
   }
   if (!keys %{$state->{members}}) {
+
+    # The empty-group creation bootstrap establishes a channel; it must not also
+    # tombstone it. A tombstone can only be reversed by a retained operator
+    # (section 11.4), and an unclaimed group has none, so a bootstrap tombstone
+    # would permanently and irrecoverably brick the channel name for its
+    # legitimate owner. Refuse it; tombstoning is an operator action on an
+    # established channel, not part of creating one.
+    my %metadata = _metadata_from_tags($event->tags);
+    if ($metadata{tombstoned}) {
+      return _reject('unauthorized: an unclaimed group cannot be tombstoned before it has an operator');
+    }
     return _accept();
   }
 

@@ -1786,4 +1786,65 @@ subtest 'a delegated 39000 cannot smuggle metadata into another group via an h t
   ok $acted, 'the victim channel was not tombstoned by a foreign 39000' or diag $reason;
 };
 
+# The empty-group creation bootstrap establishes a channel; it must not also
+# tombstone it. A tombstone can only be reversed by a retained operator (section
+# 11.4), and an unclaimed group has none, so a bootstrap tombstone would
+# permanently brick a channel name for its legitimate owner.
+subtest 'a delegated 39000 cannot tombstone an unclaimed group' => sub {
+  my $relay = _relay();
+
+  # The attacker is a self-delegating nobody with no authority over the channel.
+  my $grant = _grant_event(actor_key => $attacker_key, delegate_pubkey => $attacker_session_key->pubkey_hex);
+  $relay->store->store($grant);
+
+  my $tombstone = _snapshot_event(
+    signer_key => $attacker_session_key,
+    kind       => 39_000,
+    extra_tags => [
+      ['overnet_actor',     $attacker_key->pubkey_hex],
+      ['overnet_authority', $grant->id],
+      ['status',            'tombstoned'],
+    ],
+  );
+  my ($accepted, $reason) = _authorize($relay, $tombstone);
+  $relay->store->store($tombstone) if $accepted;    # a real relay stores what it accepts
+
+  ok !$accepted, 'a delegated 39000 cannot tombstone an unclaimed group';
+  like $reason, qr/unauthorized:\ an\ unclaimed\ group\ cannot\ be\ tombstoned/mx, 'the refusal names the reason';
+
+  # The legitimate owner can still claim the channel: it was not bricked.
+  my $owner_grant = _grant_event(actor_key => $operator_key, delegate_pubkey => $operator_session_key->pubkey_hex);
+  $relay->store->store($owner_grant);
+  my ($claimed, $claim_reason) = _authorize(
+    $relay,
+    _initial_operator_grant_control(
+      session_key  => $operator_session_key,
+      actor_pubkey => $operator_key->pubkey_hex,
+      authority_id => $owner_grant->id,
+      created_at   => $BASE_TIME + 10,
+    ),
+  );
+  ok $claimed, 'the legitimate owner can still bootstrap the unclaimed channel' or diag $claim_reason;
+};
+
+# The fix must not stop a real operator from tombstoning their own established
+# channel - that path goes through the operator-role check, not the bootstrap.
+subtest 'a channel operator can still tombstone an established channel' => sub {
+  my $relay = _relay();
+  my $grant = _seed_operator($relay);
+
+  my $tombstone = _snapshot_event(
+    signer_key => $operator_session_key,
+    kind       => 39_000,
+    created_at => $BASE_TIME + 100,
+    extra_tags => [
+      ['overnet_actor',     $operator_key->pubkey_hex],
+      ['overnet_authority', $grant->id],
+      ['status',            'tombstoned'],
+    ],
+  );
+  my ($accepted, $reason) = _authorize($relay, $tombstone);
+  ok $accepted, 'the operator can tombstone their own established channel' or diag $reason;
+};
+
 done_testing;
