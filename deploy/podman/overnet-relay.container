@@ -1,0 +1,63 @@
+# Quadlet unit for the Overnet relay (rootless podman).
+#
+# Install into the systemd unit search path and reload:
+#
+#   mkdir -p ~/.config/containers/systemd
+#   cp overnet-relay.container overnet-relay.volume ~/.config/containers/systemd/
+#   systemctl --user daemon-reload
+#   systemctl --user start overnet-relay
+#
+# Quadlet generates a transient overnet-relay.service from this file. Tune the
+# deployment by editing the Exec= arguments below in place and re-running
+# `systemctl --user daemon-reload`.
+[Unit]
+Description=Overnet relay (rootless podman)
+Documentation=https://github.com/overnet-project/relay-perl
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=overnet-relay
+Image=localhost/overnet-relay:latest
+
+# Persistent event store. The named volume is declared by the sibling
+# overnet-relay.volume unit; the mount path matches --store-file below.
+Volume=overnet-relay-store.volume:/var/lib/overnet/relay:Z
+
+# Publish the WebSocket listener on loopback only. Front it with a
+# TLS-terminating reverse proxy for public exposure, or change the bind
+# address (for example 0.0.0.0:7447:7447) to expose it directly.
+PublishPort=127.0.0.1:7447:7447
+
+# Relay invocation. The image entrypoint is overnet-relay-service.pl; these
+# arguments configure it. The --store-file path must stay inside the mounted
+# volume above so events survive container restarts.
+Exec=--host 0.0.0.0 --port 7447 \
+  --name "Overnet Relay" \
+  --description "Public Overnet relay" \
+  --relay-profile volunteer-basic \
+  --store-file /var/lib/overnet/relay/store.json \
+  --health-file /var/lib/overnet/relay/health.json \
+  --max-connections-per-ip 64 \
+  --event-rate-limit 60/60 \
+  --service-policy publish=open \
+  --service-policy query=open \
+  --service-policy subscribe=open \
+  --service-policy sync=open \
+  --service-policy object_read=open
+
+# Liveness probe: the relay's WebSocket listener must accept a TCP connection.
+# IO::Socket::INET is a core module, so this needs nothing beyond perl.
+HealthCmd=perl -MIO::Socket::INET -e "IO::Socket::INET->new(PeerAddr => '127.0.0.1:7447', Timeout => 3) or exit 1"
+HealthInterval=30s
+HealthTimeout=5s
+HealthStartPeriod=10s
+HealthRetries=3
+
+[Service]
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

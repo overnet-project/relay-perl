@@ -12,6 +12,10 @@ deploy/canary/relay-sync-b-to-a/overnet-relay-sync.env.example
 deploy/canary/relay-sync-b-to-a/relay-sync.json.example
 deploy/systemd/overnet-relay-sync@.service
 deploy/systemd/overnet-relay-sync@.timer
+deploy/podman/Containerfile
+deploy/podman/README.md
+deploy/podman/overnet-relay.container
+deploy/podman/overnet-relay.volume
 deploy/systemd/overnet-relay.env.example
 deploy/systemd/overnet-relay.service
 lib/Overnet/Authority/HostedChannel/Relay.pm
@@ -35,6 +39,7 @@ t/client-interop-hooks-disabled.t
 t/client-interop-hooks.t
 t/deploy-canary-packaging.t
 t/deploy-packaging.t
+t/deploy-podman-packaging.t
 t/deploy-restore-drill-live.t
 t/deploy-service-live.t
 t/makemaker-metadata.t
