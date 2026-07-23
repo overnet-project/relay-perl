@@ -77,4 +77,14 @@ like $readme_text, qr{podman\s+build}mx,
 like $readme_text, qr{\.config/containers/systemd}mx,
   'README documents the rootless Quadlet install path';
 
+# Setting VolumeName= makes podman use that name verbatim (no systemd- prefix),
+# so the README must inspect the volume by exactly that name and must not refer
+# to the prefixed default name the unit does not produce.
+my ($volume_name) = $volume_unit_text =~ /^VolumeName=(\S+)/mx;
+ok $volume_name, 'volume unit sets an explicit VolumeName';
+like $readme_text, qr{podman\s+volume\s+inspect\s+\Q$volume_name\E\b}mx,
+  'README inspects the volume by its actual (unprefixed) name';
+unlike $readme_text, qr{systemd-\Q$volume_name\E}mx,
+  'README does not reference the systemd- prefixed name VolumeName suppresses';
+
 done_testing;

@@ -1,9 +1,10 @@
 # Quadlet named-volume unit for the Overnet relay event store.
 #
 # Install alongside overnet-relay.container in the systemd unit search path
-# (rootless: ~/.config/containers/systemd/). The generated volume is named
-# `systemd-overnet-relay-store`; the .container unit references it by the
-# unit name (overnet-relay-store.volume).
+# (rootless: ~/.config/containers/systemd/). Because VolumeName is set below,
+# the created podman volume is named `overnet-relay-store` verbatim (without
+# the systemd- prefix Quadlet would add by default). The .container unit
+# references this unit by its unit name (overnet-relay-store.volume).
 [Unit]
 Description=Overnet relay event store volume
 

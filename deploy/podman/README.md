@@ -76,7 +76,7 @@ The relay writes readiness transitions to its log and maintains a health file
 inside the store volume:
 
 ```bash
-# Readiness/among lifecycle lines are logged to the journal:
+# Readiness and other lifecycle lines are logged to the journal:
 journalctl --user -u overnet-relay | grep '\[relay.health\]'
 
 # The health file reports ready/stopping/stopped with the listen address:
@@ -118,7 +118,7 @@ survives container restarts, rebuilds, and image updates. To inspect or back
 it up:
 
 ```bash
-podman volume inspect systemd-overnet-relay-store
+podman volume inspect overnet-relay-store
 ```
 
 The `overnet-relay-backup.pl` and `overnet-relay-sync.pl` tools in `bin/`
